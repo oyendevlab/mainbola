@@ -69,5 +69,48 @@ test.describe('GOAL RUSH PWA Vertical Slice', () => {
     // 8. Refresh and verify data is restored from IndexedDB
     await page.reload();
     await expect(page.locator('h1, h2').filter({ hasText: 'Garuda Rovers FC' }).first()).toBeVisible({ timeout: 10000 });
+
+    // 9. Phase 2: Navigate to League Tab and Create Private League
+    await page.getByRole('button', { name: 'League', exact: true }).click();
+    await expect(page.locator('text=Private Leagues')).toBeVisible();
+
+    const leagueNameInput = page.locator('input[placeholder="e.g. Premier Cup, Super 4"]');
+    await leagueNameInput.fill('Champions Cup');
+
+    const foundLeagueBtn = page.locator('button:has-text("Found League & Schedule Fixtures")');
+    await foundLeagueBtn.click();
+
+    // Verify League Header and Standings
+    await expect(page.locator('text=Champions Cup')).toBeVisible();
+    await expect(page.locator('text=League Table')).toBeVisible();
+    await expect(page.locator('td').filter({ hasText: 'Garuda Rovers FC' })).toBeVisible();
+
+    // Switch to Fixtures Tab
+    await page.locator('button:has-text("Fixtures")').click();
+    await expect(page.locator('text=Round 1')).toBeVisible();
+
+    // Lock in Tactics
+    const lockTacticsBtn = page.locator('button:has-text("Lock In Tactics")').first();
+    if (await lockTacticsBtn.isVisible()) {
+      await lockTacticsBtn.click();
+      await expect(page.locator('text=Tactics Submitted').first()).toBeVisible();
+    }
+
+    // Simulate Matchday 1
+    const simMatchdayBtn = page.locator('button:has-text("Simulate Matchday")');
+    await simMatchdayBtn.click();
+
+    // Verify Round advances to Round 2
+    await expect(page.locator('button:has-text("Round 2")')).toBeVisible();
+
+    // Verify Watch Replay button is visible for played fixture
+    await page.locator('button:has-text("Round 1")').click();
+    const watchReplayBtn = page.locator('button:has-text("Watch Replay")').first();
+    await expect(watchReplayBtn).toBeVisible();
+    await watchReplayBtn.click();
+
+    // Replay modal opened
+    await expect(page.locator('text=Matchday 1 Replay')).toBeVisible();
+    await page.locator('button:has-text("Close Replay")').click();
   });
 });

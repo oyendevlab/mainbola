@@ -122,3 +122,4 @@ export interface ManagerProfile {
   soundEnabled: boolean;
   replaySpeed: 1 | 2 | 4;
 }
+export * from './league';

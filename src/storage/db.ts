@@ -1,9 +1,11 @@
 import { openDB, DBSchema, IDBPDatabase } from 'idb';
 import { Club, ManagerProfile, MatchResult } from '../types';
+import { League } from '../types/league';
 
 export const DB_NAME = 'goal_rush_db';
-export const DB_VERSION = 1;
+export const DB_VERSION = 2;
 export const ACTIVE_CLUB_KEY = 'active_club';
+export const ACTIVE_LEAGUE_KEY = 'active_league';
 export const PROFILE_KEY = 'profile';
 
 export interface GoalRushDBSchema extends DBSchema {
@@ -25,6 +27,10 @@ export interface GoalRushDBSchema extends DBSchema {
   settings: {
     key: string;
     value: unknown;
+  };
+  leagues: {
+    key: string;
+    value: League;
   };
 }
 
@@ -59,6 +65,10 @@ export async function getDb(): Promise<IDBPDatabase<GoalRushDBSchema>> {
 
         if (!db.objectStoreNames.contains('settings')) {
           db.createObjectStore('settings');
+        }
+
+        if (!db.objectStoreNames.contains('leagues')) {
+          db.createObjectStore('leagues');
         }
       },
       blocked() {
@@ -268,21 +278,63 @@ export async function deleteSetting(key: string): Promise<void> {
 }
 
 // ============================================================================
+// League Persistence
+// ============================================================================
+
+/**
+ * Retrieve the active league from IndexedDB.
+ */
+export async function getActiveLeague(): Promise<League | null> {
+  try {
+    const db = await getDb();
+    const league = await db.get('leagues', ACTIVE_LEAGUE_KEY);
+    return league ?? null;
+  } catch (err) {
+    console.error('[IndexedDB] getActiveLeague error:', err);
+    return null;
+  }
+}
+
+/**
+ * Save or update the active league in IndexedDB.
+ */
+export async function saveActiveLeague(league: League): Promise<void> {
+  try {
+    const db = await getDb();
+    await db.put('leagues', league, ACTIVE_LEAGUE_KEY);
+  } catch (err) {
+    console.error('[IndexedDB] saveActiveLeague error:', err);
+    throw new Error(`Failed to save active league: ${err instanceof Error ? err.message : String(err)}`);
+  }
+}
+
+/**
+ * Delete the active league from IndexedDB.
+ */
+export async function deleteActiveLeague(): Promise<void> {
+  try {
+    const db = await getDb();
+    await db.delete('leagues', ACTIVE_LEAGUE_KEY);
+  } catch (err) {
+    console.error('[IndexedDB] deleteActiveLeague error:', err);
+  }
+}
+
+// ============================================================================
 // Reset and Maintenance
 // ============================================================================
 
 /**
- * Safely clears all object stores (clubs, manager, matches, settings) in a single transaction.
+ * Safely clears all object stores (clubs, manager, matches, settings, leagues) in a single transaction.
  */
 export async function resetAllData(): Promise<void> {
   try {
     const db = await getDb();
-    const tx = db.transaction(['clubs', 'manager', 'matches', 'settings'], 'readwrite');
+    const stores = ['clubs', 'manager', 'matches', 'settings', 'leagues'] as const;
+    const existingStores = stores.filter((s) => db.objectStoreNames.contains(s));
+    const tx = db.transaction(existingStores, 'readwrite');
     await Promise.all([
-      tx.objectStore('clubs').clear(),
-      tx.objectStore('manager').clear(),
-      tx.objectStore('matches').clear(),
-      tx.objectStore('settings').clear(),
+      ...existingStores.map((s) => tx.objectStore(s).clear()),
       tx.done,
     ]);
   } catch (err) {

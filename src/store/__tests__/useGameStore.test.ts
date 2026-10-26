@@ -175,4 +175,42 @@ describe('Zustand Store (useGameStore.ts)', () => {
     useGameStore.getState().setActiveTab('squad');
     expect(useGameStore.getState().activeTab).toBe('squad');
   });
+
+  it('createLeague creates a 4-team round-robin tournament and persists it', async () => {
+    await useGameStore.getState().createClub('Garuda FC', '#10B981', '#0F172A', 'shield');
+    const league = await useGameStore.getState().createLeague('Super Cup', 4);
+
+    expect(league.name).toBe('Super Cup');
+    expect(league.teams).toHaveLength(4);
+    expect(league.fixtures).toHaveLength(6);
+    expect(league.standings).toHaveLength(4);
+    expect(league.code).toMatch(/^[A-Z]+-\d{2}$/);
+    expect(useGameStore.getState().activeLeague?.id).toBe(league.id);
+  });
+
+  it('submitLeagueTactics and simulateLeagueMatchday simulates matches and advances round', async () => {
+    await useGameStore.getState().createClub('Garuda FC', '#10B981', '#0F172A', 'shield');
+    const league = await useGameStore.getState().createLeague('Super Cup', 4);
+
+    const firstFixture = league.fixtures[0];
+    await useGameStore.getState().submitLeagueTactics(firstFixture.id);
+    expect(useGameStore.getState().activeLeague?.fixtures[0].userTacticsSubmitted).toBe(true);
+
+    // Simulate matchday 1
+    await useGameStore.getState().simulateLeagueMatchday();
+    const updated = useGameStore.getState().activeLeague;
+    expect(updated?.currentRound).toBe(2);
+
+    const round1Fixtures = updated?.fixtures.filter((f) => f.round === 1);
+    expect(round1Fixtures?.every((f) => f.status === 'played')).toBe(true);
+  });
+
+  it('leaveLeague removes the league from state and DB', async () => {
+    await useGameStore.getState().createClub('Garuda FC', '#10B981', '#0F172A', 'shield');
+    await useGameStore.getState().createLeague('Super Cup', 4);
+    expect(useGameStore.getState().activeLeague).not.toBeNull();
+
+    await useGameStore.getState().leaveLeague();
+    expect(useGameStore.getState().activeLeague).toBeNull();
+  });
 });
