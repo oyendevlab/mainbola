@@ -54,6 +54,11 @@ test.describe('MainBola PWA Vertical Slice', () => {
     // Test replay speed toggle to 4x
     await page.locator('button:has-text("4x")').click();
 
+    // Test audio toggle (v0.4.0)
+    const audioBtn = page.getByTestId('sound-toggle');
+    await expect(audioBtn).toBeVisible();
+    await audioBtn.click();
+
     // Open Stats Breakdown
     const statsBtn = page.locator('button:has-text("Stats")');
     await statsBtn.click();
@@ -139,5 +144,11 @@ test.describe('MainBola PWA Vertical Slice', () => {
 
     // Verify squad capacity updated to 16 / 20
     await expect(page.locator('text=Kapasiti Skuad: 16 / 20')).toBeVisible();
+
+    // 11. Phase 4: Trophy Cabinet in Profile Tab
+    await page.getByRole('button', { name: 'Profile', exact: true }).click();
+    await expect(page.locator('text=Kabinet Trofi & Pencapaian')).toBeVisible();
+    await expect(page.locator('text=Juara Liga')).toBeVisible();
+    await expect(page.locator('text=Kasut Emas')).toBeVisible();
   });
 });

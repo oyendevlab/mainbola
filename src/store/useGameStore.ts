@@ -48,7 +48,9 @@ import {
   generateTransferMarket,
 } from '../engine/transfers';
 import { validateSquadSelection } from '../types/formations';
-import { PlayerAttributes, TrainingDrillType, TransferTarget } from '../types';
+import { PlayerAttributes, TrainingDrillType, TransferTarget, Trophy } from '../types';
+import { setSoundEnabled } from '../engine/audio';
+import { evaluateUnlockedTrophies } from '../engine/trophies';
 
 export type ActiveTab = 'home' | 'squad' | 'match' | 'league' | 'profile';
 
@@ -66,6 +68,7 @@ export interface GameState {
   activeLeague: League | null;
   selectedReplayFixture: LeagueFixture | null;
   transferTargets: TransferTarget[];
+  unlockedTrophies: Trophy[];
   isLoading: boolean;
   activeTab: ActiveTab;
   currentMatch: MatchResult | null;
@@ -86,6 +89,10 @@ export interface GameState {
   setActiveTab: (tab: ActiveTab) => void;
   setCurrentMatch: (match: MatchResult | null) => void;
   updateProfile: (updates: Partial<ManagerProfile>) => Promise<void>;
+
+  // Phase 4 Trophy & Season Awards
+  claimLeaguePrize: () => Promise<{ prize: number; success: boolean; message: string }>;
+  startNewLeagueSeason: () => Promise<League | null>;
 
   // Phase 3 Player Progression & Transfer Actions
   trainPlayer: (
@@ -113,6 +120,7 @@ export const useGameStore = create<GameState>((set, get) => ({
   activeLeague: null,
   selectedReplayFixture: null,
   transferTargets: [],
+  unlockedTrophies: [],
   isLoading: true,
   activeTab: 'home',
   currentMatch: null,
@@ -135,6 +143,8 @@ export const useGameStore = create<GameState>((set, get) => ({
         });
       }
 
+      setSoundEnabled(profile.soundEnabled ?? true);
+
       let market = savedMarket;
       if (!market || market.length === 0) {
         market = generateTransferMarket();
@@ -143,12 +153,17 @@ export const useGameStore = create<GameState>((set, get) => ({
         });
       }
 
+      const trophies = savedClub
+        ? evaluateUnlockedTrophies(savedClub, savedLeague, savedMatches)
+        : [];
+
       set({
         club: savedClub,
         profile,
         matchHistory: savedMatches,
         activeLeague: savedLeague,
         transferTargets: market,
+        unlockedTrophies: trophies,
         isLoading: false,
       });
     } catch (err) {
@@ -159,6 +174,7 @@ export const useGameStore = create<GameState>((set, get) => ({
         matchHistory: [],
         activeLeague: null,
         transferTargets: [],
+        unlockedTrophies: [],
         isLoading: false,
       });
     }
@@ -266,6 +282,8 @@ export const useGameStore = create<GameState>((set, get) => ({
     };
 
     const updatedHistory = [result, ...matchHistory];
+    const { activeLeague } = get();
+    const updatedTrophies = evaluateUnlockedTrophies(updatedClub, activeLeague, updatedHistory);
 
     await Promise.all([
       saveClub(updatedClub),
@@ -277,6 +295,7 @@ export const useGameStore = create<GameState>((set, get) => ({
       club: updatedClub,
       profile: updatedProfile,
       matchHistory: updatedHistory,
+      unlockedTrophies: updatedTrophies,
       currentMatch: result,
     });
   },
@@ -290,6 +309,7 @@ export const useGameStore = create<GameState>((set, get) => ({
       activeLeague: null,
       selectedReplayFixture: null,
       transferTargets: [],
+      unlockedTrophies: [],
       currentMatch: null,
       activeTab: 'home',
     });
@@ -309,6 +329,9 @@ export const useGameStore = create<GameState>((set, get) => ({
       ...profile,
       ...updates,
     };
+    if (updates.soundEnabled !== undefined) {
+      setSoundEnabled(updates.soundEnabled);
+    }
     await saveProfile(updated);
     set({ profile: updated });
   },
@@ -552,6 +575,84 @@ export const useGameStore = create<GameState>((set, get) => ({
   leaveLeague: async () => {
     await deleteActiveLeague();
     set({ activeLeague: null, selectedReplayFixture: null });
+  },
+
+  claimLeaguePrize: async () => {
+    const { activeLeague, club, matchHistory } = get();
+    if (!activeLeague || !club) {
+      return { success: false, prize: 0, message: 'No active league found.' };
+    }
+
+    const isCompleted =
+      activeLeague.status === 'completed' || activeLeague.currentRound > activeLeague.totalRounds;
+    if (!isCompleted) {
+      return { success: false, prize: 0, message: 'League season is still active.' };
+    }
+
+    const standings = activeLeague.standings;
+    const isChampion = standings.length > 0 && standings[0].clubId === club.id;
+
+    if (!isChampion) {
+      return { success: false, prize: 0, message: 'Only the league champion can claim the top prize.' };
+    }
+
+    const prize = 25000;
+    const updatedClub: Club = {
+      ...club,
+      budget: club.budget + prize,
+    };
+
+    await saveClub(updatedClub);
+
+    const updatedTrophies = evaluateUnlockedTrophies(updatedClub, activeLeague, matchHistory);
+
+    set({
+      club: updatedClub,
+      unlockedTrophies: updatedTrophies,
+    });
+
+    return {
+      success: true,
+      prize,
+      message: `Tahniah! Kejuaraan Liga diraikan. Hadiah tunai ${prize.toLocaleString()} C dikreditkan!`,
+    };
+  },
+
+  startNewLeagueSeason: async () => {
+    const { activeLeague, club, matchHistory } = get();
+    if (!activeLeague) return null;
+
+    const newSeason = activeLeague.season + 1;
+    const teamSnapshots = activeLeague.teams;
+    const seed = Date.now();
+    const newFixtures = generateRoundRobinFixtures(teamSnapshots, seed);
+    const initialStandings = calculateLeagueStandings(teamSnapshots, newFixtures);
+
+    const refreshedLeague: League = {
+      ...activeLeague,
+      season: newSeason,
+      status: 'active',
+      currentRound: 1,
+      totalRounds: (teamSnapshots.length - 1) * 2,
+      fixtures: newFixtures,
+      standings: initialStandings,
+      topScorers: [],
+      createdAt: Date.now(),
+    };
+
+    await saveActiveLeague(refreshedLeague);
+
+    const updatedTrophies = club
+      ? evaluateUnlockedTrophies(club, refreshedLeague, matchHistory)
+      : [];
+
+    set({
+      activeLeague: refreshedLeague,
+      selectedReplayFixture: null,
+      unlockedTrophies: updatedTrophies,
+    });
+
+    return refreshedLeague;
   },
 
   setSelectedReplayFixture: (fixture: LeagueFixture | null) => {

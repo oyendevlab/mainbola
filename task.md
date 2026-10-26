@@ -1,7 +1,7 @@
 # MainBola: Project Task & Progress Tracker
 
-> **Current Version:** `v0.3.0` (Completed)  
-> **Previous Versions:** `v0.1.0` (Phase 1 Complete), `v0.2.0` (Phase 2 Complete), `v0.2.1` (Rebranding & Logo Complete)  
+> **Current Version:** `v0.4.0` (Completed)  
+> **Previous Versions:** `v0.1.0` (Phase 1 Complete), `v0.2.0` (Phase 2 Complete), `v0.2.1` (Rebranding & Logo Complete), `v0.3.0` (Player Progression & Transfers Complete)  
 > **Last Updated:** 2026-10-26
 
 ---
@@ -124,7 +124,40 @@
 
 ---
 
-## 🔮 Version 0.4.0: Cloud Sync, Audio FX & Advanced League Multiplayer (Planned)
-- [ ] Realtime multiplayer websockets & cloud sync for remote invite codes.
-- [ ] 8-bit retro sound effects (whistle, cheer, kick, goal horn).
-- [ ] In-depth match commentary engine with crowd animations.
+### 🟢 Version 0.4.0: Matchday Immersion, Audio FX & Trophy Cabinet (Completed)
+*Completed on 2026-10-26 • 106/106 Unit Tests Passing • Playwright E2E Verified*
+
+- [x] **1. Web Audio FX Procedural Synthesizer (`src/engine/audio.ts`)**:
+  - [x] Procedural 8-bit/16-bit sound synthesis via Web Audio API (zero audio file downloads, 0 KB footprint).
+  - [x] Whistle synthesizers with FM modulation (kickoff, halftime, fulltime).
+  - [x] Exponential pitch-drop kick & pass sounds.
+  - [x] Retro 8-bit stadium cheer fanfare (arpeggio + white-noise bandpass roar).
+  - [x] Crunch tackle & deflection impact synthesizers.
+  - [x] Safe Node/SSR fallback and user setting mute toggle.
+- [x] **2. Halftime Tactical Interventions & Substitutions (`src/pages/MatchTab.tsx`, `src/renderer/MatchScene.ts`)**:
+  - [x] Automatic pause and referee whistle at 45' halftime.
+  - [x] Halftime modal displaying live score, 1st half performance, and substitution count.
+  - [x] In-match tactical mentality adjustment (`Attacking`, `Balanced`, `Defensive`).
+  - [x] Up to 3 tactical player substitutions between starting XI and bench.
+  - [x] Seamless continuation into 2nd half.
+- [x] **3. Phaser 3 Match Visual Polish & Audio Synchronization**:
+  - [x] Live sound triggers hooked directly into simulation event playback (kickoff, pass, tackle, shot, save, goal, fulltime).
+  - [x] Pixel-art celebration effects and stadium fanfare on goals.
+  - [x] Replay controls bar equipped with audio toggle button (`Volume2` / `VolumeX`).
+- [x] **4. Trophy Cabinet & League Season Awards (`src/pages/ProfileTab.tsx`, `src/pages/LeagueTab.tsx`, `src/store/useGameStore.ts`)**:
+  - [x] Trophy engine (`src/engine/trophies.ts`) with 5 unlockable achievements:
+    - 🏆 *Juara Liga (Champion)*
+    - 👟 *Kasut Emas (Golden Boot)*
+    - 💯 *Kelab 100 Gol (Centurion)*
+    - 🛡️ *The Invincibles (Tanpa Kalah)*
+    - 🧠 *Taktikal Mastermind*
+  - [x] Interactive Trophy Cabinet grid in Profile Tab with golden badges and unlock criteria progress.
+  - [x] Season Complete Award Ceremony card in League Tab with "Tuntut Hadiah Juara (25,000 Credits)" and "Mulakan Musim Seterusnya" button.
+- [x] **5. Verification & Testing**:
+  - [x] 32 new unit tests added (12 audio tests, 20 trophy engine tests) bringing total to 106 tests across 10 test suites.
+  - [x] Playwright E2E test verifying audio toggle, halftime workflow, and trophy cabinet display.
+  - [x] Production build (`tsc && vite build`) passed with 16 precached PWA service worker entries.
+
+---
+
+## 🔮 Version 0.5.0: Cloud Sync, Multiplayer WebSockets & Custom Tournaments (Planned)

@@ -26,6 +26,8 @@ export const LeagueTab: React.FC = () => {
     submitLeagueTactics,
     simulateLeagueMatchday,
     leaveLeague,
+    claimLeaguePrize,
+    startNewLeagueSeason,
   } = useGameStore();
 
   // Create League form states
@@ -34,6 +36,7 @@ export const LeagueTab: React.FC = () => {
   const [joinCode, setJoinCode] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [copiedCode, setCopiedCode] = useState(false);
+  const [prizeFeedback, setPrizeFeedback] = useState<string | null>(null);
 
   // Active League view states
   const [activeSubTab, setActiveSubTab] = useState<'standings' | 'fixtures' | 'scorers'>('standings');
@@ -250,6 +253,58 @@ export const LeagueTab: React.FC = () => {
               </button>
             </div>
           </div>
+
+          {/* Season Complete Ceremony Card */}
+          {activeLeague.status === 'completed' && (
+            <div className="rounded-2xl bg-gradient-to-r from-amber-500/15 via-navy-900 to-amber-500/10 border border-amber-500/40 p-4 shadow-xl space-y-3 animate-in zoom-in-95 duration-200">
+              <div className="flex items-center gap-3">
+                <div className="w-12 h-12 rounded-2xl bg-amber-400/20 border border-amber-400/40 flex items-center justify-center text-2xl shrink-0">
+                  🏆
+                </div>
+                <div>
+                  <h3 className="text-sm font-extrabold text-amber-300 tracking-tight">
+                    Musim Ke-{activeLeague.season} Selesai Sepenuhnya!
+                  </h3>
+                  <p className="text-xs text-slate-300 mt-0.5">
+                    {activeLeague.standings.length > 0 && activeLeague.standings[0].clubId === club.id
+                      ? 'Tahniah! Kelab anda berjaya merangkul takhta Juara Liga Musim ini.'
+                      : `Juara rasmi dinobatkan kepada ${activeLeague.standings[0]?.clubName || 'Juara'}.`}
+                  </p>
+                </div>
+              </div>
+
+              {prizeFeedback && (
+                <div className="p-2.5 rounded-xl bg-amber-500/20 border border-amber-500/40 text-xs font-semibold text-amber-200">
+                  {prizeFeedback}
+                </div>
+              )}
+
+              <div className="flex flex-wrap gap-2 pt-1">
+                {activeLeague.standings.length > 0 && activeLeague.standings[0].clubId === club.id && (
+                  <button
+                    onClick={async () => {
+                      const res = await claimLeaguePrize();
+                      setPrizeFeedback(res.message);
+                    }}
+                    className="flex-1 py-2 px-3 rounded-xl bg-amber-500 hover:bg-amber-400 text-navy-950 font-black text-xs transition cursor-pointer shadow-md shadow-amber-500/20"
+                  >
+                    Tuntut Hadiah Juara (25,000 C)
+                  </button>
+                )}
+
+                <button
+                  onClick={async () => {
+                    await startNewLeagueSeason();
+                    setSelectedRound(1);
+                    setPrizeFeedback('Musim baharu telah bermula!');
+                  }}
+                  className="flex-1 py-2 px-3 rounded-xl bg-emerald-500 hover:bg-emerald-400 text-navy-950 font-black text-xs transition cursor-pointer shadow-md shadow-emerald-500/20"
+                >
+                  Mulakan Musim Seterusnya
+                </button>
+              </div>
+            </div>
+          )}
 
           {/* Subtabs Selector: Standings, Fixtures, Top Scorers */}
           <div className="grid grid-cols-3 gap-1.5 bg-navy-950 p-1 rounded-xl border border-slate-800">

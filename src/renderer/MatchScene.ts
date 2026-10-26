@@ -1,6 +1,7 @@
 import Phaser from 'phaser';
 import { FormationType, MatchEvent, Player, PlayerPosition } from '../types';
 import { FORMATION_CONFIGS } from '../types/formations';
+import { playWhistle, playKick, playCheer, playTackle } from '../engine/audio';
 
 export interface TeamVisualInfo {
   id: string;
@@ -15,6 +16,7 @@ export interface MatchSceneCallbacks {
   onTimeUpdate?: (minute: number) => void;
   onEvent?: (event: MatchEvent) => void;
   onScoreUpdate?: (homeScore: number, awayScore: number) => void;
+  onHalftime?: () => void;
   onMatchEnd?: () => void;
 }
 
@@ -958,36 +960,49 @@ export class MatchScene extends Phaser.Scene {
 
     switch (event.type) {
       case 'KICKOFF': {
+        playWhistle('kickoff');
         this.animateKickoff(onComplete);
         break;
       }
       case 'PASS': {
+        playKick(false);
         this.animatePass(fromX, fromY, toX, toY, isHome, speed, onComplete);
         break;
       }
       case 'SHOT': {
+        playKick(true);
         this.animateShot(fromX, fromY, isHome, false, speed, onComplete);
         break;
       }
       case 'SAVE': {
+        playKick(true);
         this.animateShot(fromX, fromY, !isHome, true, speed, onComplete);
         break;
       }
       case 'GOAL': {
+        playCheer();
         this.animateGoal(fromX, fromY, isHome, event, speed, onComplete);
         break;
       }
       case 'TACKLE':
       case 'INTERCEPTION':
       case 'TURNOVER': {
+        playTackle();
         this.animateTackle(fromX, fromY, event.type, speed, onComplete);
         break;
       }
       case 'HALFTIME': {
-        this.animateWhistle('HALF TIME', 1000 / speed, onComplete);
+        playWhistle('halftime');
+        this.animateWhistle('HALF TIME', 1000 / speed, () => {
+          if (this.callbacks.onHalftime) {
+            this.callbacks.onHalftime();
+          }
+          onComplete();
+        });
         break;
       }
       case 'FULLTIME': {
+        playWhistle('fulltime');
         this.animateWhistle('FULL TIME', 1500 / speed, onComplete);
         break;
       }

@@ -1,12 +1,16 @@
 import React, { useState } from 'react';
 import { useGameStore } from '../store/useGameStore';
 import { BadgeIcon } from '../components/common/BadgeIcon';
-import { User, Shield, Volume2, VolumeX, RotateCcw, AlertTriangle, CheckCircle2, Award, Zap } from 'lucide-react';
+import { User, Shield, Volume2, VolumeX, RotateCcw, AlertTriangle, CheckCircle2, Award, Zap, Trophy, Lock } from 'lucide-react';
+import { getAllTrophies } from '../engine/trophies';
 
 export const ProfileTab: React.FC = () => {
-  const { club, profile, updateProfile, resetGame, matchHistory } = useGameStore();
+  const { club, profile, updateProfile, resetGame, matchHistory, unlockedTrophies } = useGameStore();
   const [showResetConfirm, setShowResetConfirm] = useState(false);
   const [resetSuccess, setResetSuccess] = useState(false);
+
+  const allTrophies = getAllTrophies();
+  const unlockedIds = new Set((unlockedTrophies || []).map((t) => t.id));
 
   const handleToggleSound = () => {
     updateProfile({ soundEnabled: !profile.soundEnabled });
@@ -118,6 +122,68 @@ export const ProfileTab: React.FC = () => {
           </div>
         </div>
       )}
+
+      {/* Trophy Cabinet & Achievements Section */}
+      <div className="rounded-2xl bg-navy-900 border border-slate-800 p-5 shadow-xl space-y-4">
+        <div className="flex items-center justify-between">
+          <div className="flex items-center gap-2.5">
+            <Trophy className="w-4 h-4 text-amber-400" />
+            <h3 className="text-xs font-bold text-slate-300 uppercase tracking-wider">
+              Kabinet Trofi &amp; Pencapaian
+            </h3>
+          </div>
+          <span className="text-xs font-mono font-bold text-amber-400 bg-amber-500/10 px-2 py-0.5 rounded-full border border-amber-500/20">
+            {unlockedIds.size} / {allTrophies.length} Trofi
+          </span>
+        </div>
+
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+          {allTrophies.map((trophy) => {
+            const isUnlocked = unlockedIds.has(trophy.id);
+
+            return (
+              <div
+                key={trophy.id}
+                className={`p-3.5 rounded-2xl border transition flex items-start gap-3.5 ${
+                  isUnlocked
+                    ? 'bg-amber-500/10 border-amber-500/40 shadow-lg shadow-amber-500/10'
+                    : 'bg-navy-950/60 border-slate-800/80 opacity-60'
+                }`}
+              >
+                <div
+                  className={`w-12 h-12 rounded-xl flex items-center justify-center text-2xl shrink-0 border ${
+                    isUnlocked
+                      ? 'bg-amber-400/20 border-amber-400/50 text-amber-300 shadow-inner'
+                      : 'bg-slate-800/60 border-slate-700/60 text-slate-500'
+                  }`}
+                >
+                  {isUnlocked ? trophy.icon : <Lock className="w-5 h-5 text-slate-500" />}
+                </div>
+
+                <div className="min-w-0 flex-1">
+                  <div className="flex items-center justify-between gap-1">
+                    <h4
+                      className={`text-xs font-bold truncate ${
+                        isUnlocked ? 'text-amber-300' : 'text-slate-400'
+                      }`}
+                    >
+                      {trophy.title}
+                    </h4>
+                    {isUnlocked && (
+                      <span className="text-[9px] font-mono font-bold px-1.5 py-0.2 rounded bg-amber-400/20 text-amber-300 border border-amber-400/30 shrink-0">
+                        DIRANGKUL
+                      </span>
+                    )}
+                  </div>
+                  <p className="text-[11px] text-slate-400 mt-1 leading-relaxed">
+                    {trophy.description}
+                  </p>
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      </div>
 
       {/* Preferences Section */}
       <div className="rounded-2xl bg-navy-900 border border-slate-800 p-5 shadow-xl space-y-4">

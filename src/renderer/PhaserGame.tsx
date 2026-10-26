@@ -28,6 +28,7 @@ export interface PhaserGameProps {
   onTimeUpdate?: (minute: number) => void;
   onEvent?: (event: MatchEvent) => void;
   onScoreUpdate?: (homeScore: number, awayScore: number) => void;
+  onHalftime?: () => void;
   onMatchEnd?: () => void;
   className?: string;
   containerId?: string;
@@ -44,6 +45,7 @@ export const PhaserGame = forwardRef<PhaserGameRef, PhaserGameProps>(
       onTimeUpdate,
       onEvent,
       onScoreUpdate,
+      onHalftime,
       onMatchEnd,
       className = '',
       containerId = DEFAULT_CONTAINER_ID,
@@ -59,6 +61,7 @@ export const PhaserGame = forwardRef<PhaserGameRef, PhaserGameProps>(
       onTimeUpdate,
       onEvent,
       onScoreUpdate,
+      onHalftime,
       onMatchEnd,
     });
 
@@ -67,12 +70,13 @@ export const PhaserGame = forwardRef<PhaserGameRef, PhaserGameProps>(
         onTimeUpdate,
         onEvent,
         onScoreUpdate,
+        onHalftime,
         onMatchEnd,
       };
       if (sceneRef.current) {
         sceneRef.current.setCallbacks(callbacksRef.current);
       }
-    }, [onTimeUpdate, onEvent, onScoreUpdate, onMatchEnd]);
+    }, [onTimeUpdate, onEvent, onScoreUpdate, onHalftime, onMatchEnd]);
 
     // Imperative Handles
     const pause = useCallback(() => {

@@ -160,4 +160,15 @@ export interface TransferTarget {
   potentialRating: number;
 }
 
+// Trophy Cabinet & Achievements
+export interface Trophy {
+  id: string;
+  title: string;
+  description: string;
+  icon: string;
+  category: string;
+  unlockedAt?: number;
+}
+
 export * from './league';
+

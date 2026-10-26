@@ -2,7 +2,7 @@ import React, { useState, useRef, useEffect } from 'react';
 import { useGameStore } from '../store/useGameStore';
 import { PRESET_AI_CLUBS, generateClub, createClubSnapshot } from '../engine/generator';
 import { simulateMatch } from '../engine/simulator';
-import { MatchResult, MatchEvent } from '../types';
+import { MatchResult, MatchEvent, TacticalStyle, Player } from '../types';
 import { PhaserGame, PhaserGameRef } from '../renderer/PhaserGame';
 import { BadgeIcon } from '../components/common/BadgeIcon';
 import confetti from 'canvas-confetti';
@@ -14,10 +14,21 @@ import {
   Shield,
   Activity,
   ChevronRight,
+  Volume2,
+  VolumeX,
+  ArrowLeftRight,
 } from 'lucide-react';
 
 export const MatchTab: React.FC = () => {
-  const { club, profile, recordMatchResult, setActiveTab } = useGameStore();
+  const {
+    club,
+    profile,
+    recordMatchResult,
+    setActiveTab,
+    updateTactics,
+    setStartingXI,
+    updateProfile,
+  } = useGameStore();
 
   const [selectedOpponentConfig, setSelectedOpponentConfig] = useState(PRESET_AI_CLUBS[0]);
   const [matchResult, setMatchResult] = useState<MatchResult | null>(null);
@@ -29,6 +40,10 @@ export const MatchTab: React.FC = () => {
   const [awayScore, setAwayScore] = useState(0);
   const [commentary, setCommentary] = useState<string>('Pre-match preparation complete.');
   const [showStatsModal, setShowStatsModal] = useState(false);
+  const [showHalftimeModal, setShowHalftimeModal] = useState(false);
+  const [halftimeTactics, setHalftimeTactics] = useState<TacticalStyle>(club?.tactics || 'Balanced');
+  const [selectedSubStarterId, setSelectedSubStarterId] = useState<string | null>(null);
+  const [subsCount, setSubsCount] = useState(0);
 
   const phaserRef = useRef<PhaserGameRef | null>(null);
 
@@ -68,6 +83,37 @@ export const MatchTab: React.FC = () => {
     setIsPlayingReplay(true);
     setIsPaused(false);
     setShowStatsModal(false);
+    setShowHalftimeModal(false);
+    setSubsCount(0);
+    setSelectedSubStarterId(null);
+    setHalftimeTactics(club.tactics);
+  };
+
+  const handleHalftime = () => {
+    setIsPaused(true);
+    setShowHalftimeModal(true);
+    phaserRef.current?.pause();
+  };
+
+  const handleResumeSecondHalf = () => {
+    if (halftimeTactics !== club.tactics) {
+      updateTactics(halftimeTactics);
+    }
+    setShowHalftimeModal(false);
+    setIsPaused(false);
+    phaserRef.current?.resume();
+  };
+
+  const handleToggleSound = () => {
+    updateProfile({ soundEnabled: !profile.soundEnabled });
+  };
+
+  const handleSubstitute = (benchPlayer: Player) => {
+    if (!selectedSubStarterId || subsCount >= 3) return;
+    const newXI = club.startingXI.map((id) => (id === selectedSubStarterId ? benchPlayer.id : id));
+    setStartingXI(newXI);
+    setSubsCount((prev) => prev + 1);
+    setSelectedSubStarterId(null);
   };
 
   const handlePauseResume = () => {
@@ -321,6 +367,7 @@ export const MatchTab: React.FC = () => {
               onTimeUpdate={handleTimeUpdate}
               onEvent={handleEvent}
               onScoreUpdate={handleScoreUpdate}
+              onHalftime={handleHalftime}
               onMatchEnd={handleMatchEnd}
               className="w-full aspect-[16/9] block"
             />
@@ -334,7 +381,7 @@ export const MatchTab: React.FC = () => {
 
           {/* Replay Controls Bar */}
           <div className="flex items-center justify-between p-3 rounded-2xl bg-navy-900 border border-slate-800">
-            {/* Play/Pause & Restart */}
+            {/* Play/Pause & Restart & Audio */}
             <div className="flex items-center gap-2">
               <button
                 onClick={handlePauseResume}
@@ -350,6 +397,20 @@ export const MatchTab: React.FC = () => {
                 title="Restart Replay"
               >
                 <RotateCcw className="w-4 h-4" />
+              </button>
+
+              <button
+                onClick={handleToggleSound}
+                className="p-2.5 rounded-xl bg-navy-950 border border-slate-700 hover:border-slate-600 transition cursor-pointer"
+                title={profile.soundEnabled ? 'Mute Audio' : 'Unmute Audio'}
+                aria-label="Toggle Sound"
+                data-testid="sound-toggle"
+              >
+                {profile.soundEnabled ? (
+                  <Volume2 className="w-4 h-4 text-emerald-400" />
+                ) : (
+                  <VolumeX className="w-4 h-4 text-slate-500" />
+                )}
               </button>
             </div>
 
@@ -482,6 +543,160 @@ export const MatchTab: React.FC = () => {
                 Return Home
               </button>
             </div>
+          </div>
+        </div>
+      )}
+
+      {/* Halftime Tactical Interventions & Substitutions Modal */}
+      {showHalftimeModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/85 backdrop-blur-md p-4 overflow-y-auto">
+          <div className="bg-navy-900 border border-slate-700/80 rounded-2xl w-full max-w-lg p-5 sm:p-6 shadow-2xl my-auto animate-in zoom-in-95 duration-150">
+            {/* Header */}
+            <div className="text-center mb-5 border-b border-slate-800 pb-4">
+              <span className="text-[11px] font-mono font-bold uppercase tracking-wider text-amber-400 bg-amber-500/10 px-3 py-1 rounded-full border border-amber-500/30 inline-flex items-center gap-1.5 mb-2">
+                ⏱️ Rehat Separuh Masa (Minut 45')
+              </span>
+              <h3 className="text-base sm:text-lg font-black text-white">Arahan & Pertukaran Taktikal</h3>
+              <p className="text-xs text-slate-400 mt-1">
+                Skor Semasa: <span className="font-mono font-bold text-emerald-400">{homeScore}</span> - <span className="font-mono font-bold text-amber-400">{awayScore}</span> • Pertukaran: <span className="font-mono text-white font-bold">{subsCount}/3</span>
+              </p>
+            </div>
+
+            {/* Tactical Mentality Selection */}
+            <div className="mb-5">
+              <label className="block text-xs font-bold text-slate-300 uppercase tracking-wider mb-2">
+                Mentaliti Taktikal Separuh Masa Ke-2
+              </label>
+              <div className="grid grid-cols-3 gap-2">
+                {(['Defensive', 'Balanced', 'Attacking'] as TacticalStyle[]).map((style) => (
+                  <button
+                    key={style}
+                    onClick={() => setHalftimeTactics(style)}
+                    className={`py-2 px-3 rounded-xl border text-xs font-bold transition flex flex-col items-center gap-1 cursor-pointer ${
+                      halftimeTactics === style
+                        ? 'bg-emerald-500/20 border-emerald-500 text-emerald-400 shadow-sm'
+                        : 'bg-navy-950 border-slate-800 text-slate-400 hover:border-slate-700'
+                    }`}
+                  >
+                    <span>{style === 'Defensive' ? '🛡️ Bertahan' : style === 'Balanced' ? '⚖️ Seimbang' : '⚡ Menyerang'}</span>
+                    <span className="text-[10px] font-normal opacity-70">
+                      {style === 'Defensive' ? '-Concede' : style === 'Balanced' ? 'Default' : '+Chance'}
+                    </span>
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            {/* Substitutions Section */}
+            <div className="mb-5 space-y-3">
+              <div className="flex items-center justify-between">
+                <label className="text-xs font-bold text-slate-300 uppercase tracking-wider">
+                  Pertukaran Pemain ({3 - subsCount} baki)
+                </label>
+                {selectedSubStarterId && (
+                  <button
+                    onClick={() => setSelectedSubStarterId(null)}
+                    className="text-[10px] text-rose-400 hover:text-rose-300 underline"
+                  >
+                    Batal Pilihan
+                  </button>
+                )}
+              </div>
+
+              {selectedSubStarterId ? (
+                <div className="bg-emerald-500/10 border border-emerald-500/30 p-2.5 rounded-xl text-xs text-emerald-300 flex items-center justify-between">
+                  <span>Pilih pemain simpanan di bawah untuk menggantikan kesebelasan utama:</span>
+                  <ArrowLeftRight className="w-4 h-4 text-emerald-400 shrink-0" />
+                </div>
+              ) : (
+                <p className="text-[11px] text-slate-400">
+                  {subsCount >= 3
+                    ? 'Had maksima 3 pertukaran pemain telah dicapai.'
+                    : 'Klik seorang pemain kesebelasan utama, kemudian klik pemain simpanan untuk bertukar.'}
+                </p>
+              )}
+
+              {/* Starting XI List (Select Starter to sub out) */}
+              <div className="bg-navy-950 p-2.5 rounded-xl border border-slate-800 max-h-36 overflow-y-auto space-y-1">
+                <div className="text-[10px] font-mono text-slate-500 font-bold uppercase mb-1">
+                  Kesebelasan Utama (Klik untuk pilih ganti):
+                </div>
+                {club.startingXI.map((id) => {
+                  const player = club.squad.find((p) => p.id === id);
+                  if (!player) return null;
+                  const isSelected = selectedSubStarterId === player.id;
+                  return (
+                    <button
+                      key={player.id}
+                      disabled={subsCount >= 3}
+                      onClick={() => setSelectedSubStarterId(isSelected ? null : player.id)}
+                      className={`w-full flex items-center justify-between px-2.5 py-1.5 rounded-lg text-xs transition cursor-pointer ${
+                        isSelected
+                          ? 'bg-amber-500/20 border border-amber-500 text-amber-300'
+                          : 'hover:bg-slate-800/60 text-slate-200 border border-transparent'
+                      }`}
+                    >
+                      <div className="flex items-center gap-2">
+                        <span className="font-mono text-[10px] px-1.5 py-0.5 rounded bg-slate-800 text-slate-300 font-bold">
+                          {player.position}
+                        </span>
+                        <span className="font-semibold text-xs">{player.name}</span>
+                      </div>
+                      <span className="font-mono text-[11px] text-emerald-400 font-bold">
+                        OVR {player.overallRating}
+                      </span>
+                    </button>
+                  );
+                })}
+              </div>
+
+              {/* Bench List (Substitutes) */}
+              <div className="bg-navy-950 p-2.5 rounded-xl border border-slate-800 max-h-32 overflow-y-auto space-y-1">
+                <div className="text-[10px] font-mono text-slate-500 font-bold uppercase mb-1">
+                  Pemain Simpanan (Bangku Simpanan):
+                </div>
+                {club.squad
+                  .filter((p) => !club.startingXI.includes(p.id))
+                  .map((benchPlayer) => (
+                    <button
+                      key={benchPlayer.id}
+                      disabled={!selectedSubStarterId || subsCount >= 3}
+                      onClick={() => handleSubstitute(benchPlayer)}
+                      className={`w-full flex items-center justify-between px-2.5 py-1.5 rounded-lg text-xs transition ${
+                        selectedSubStarterId && subsCount < 3
+                          ? 'hover:bg-emerald-500/20 hover:border-emerald-500 border border-transparent text-emerald-300 cursor-pointer'
+                          : 'opacity-50 cursor-not-allowed text-slate-400'
+                      }`}
+                    >
+                      <div className="flex items-center gap-2">
+                        <span className="font-mono text-[10px] px-1.5 py-0.5 rounded bg-slate-800 text-slate-400">
+                          {benchPlayer.position}
+                        </span>
+                        <span className="font-medium text-xs">{benchPlayer.name}</span>
+                      </div>
+                      <div className="flex items-center gap-2">
+                        <span className="font-mono text-[11px] text-slate-300">
+                          OVR {benchPlayer.overallRating}
+                        </span>
+                        {selectedSubStarterId && subsCount < 3 && (
+                          <span className="text-[10px] bg-emerald-500 text-navy-950 font-bold px-1.5 py-0.5 rounded">
+                            Ganti Masuk
+                          </span>
+                        )}
+                      </div>
+                    </button>
+                  ))}
+              </div>
+            </div>
+
+            {/* Resume Button */}
+            <button
+              onClick={handleResumeSecondHalf}
+              className="w-full py-3 rounded-xl font-bold text-sm bg-emerald-500 hover:bg-emerald-400 text-navy-950 transition text-center shadow-lg shadow-emerald-500/25 flex items-center justify-center gap-2 cursor-pointer"
+            >
+              <span>Sambung Separuh Masa Kedua</span>
+              <ChevronRight className="w-4 h-4" />
+            </button>
           </div>
         </div>
       )}
