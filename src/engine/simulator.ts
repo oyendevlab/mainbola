@@ -148,7 +148,7 @@ function resolveClubSnapshot(club: ClubSnapshot | Club): ClubSnapshot {
 }
 
 /**
- * Deterministic match simulation engine for GOAL RUSH.
+ * Deterministic match simulation engine for MainBola.
  * Same clubs + same seed = IDENTICAL scores, events, and stats.
  */
 export function simulateMatch(

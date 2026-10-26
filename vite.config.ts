@@ -11,8 +11,8 @@ export default defineConfig({
       registerType: 'autoUpdate',
       includeAssets: ['favicon.ico', 'apple-touch-icon.png', 'icons/*.png'],
       manifest: {
-        name: 'GOAL RUSH - Football Manager Lite',
-        short_name: 'GoalRush',
+        name: 'MainBola - Football Manager Lite',
+        short_name: 'MainBola',
         description: 'Casual mobile football management game with 2D pixel-art match replays.',
         theme_color: '#0F172A',
         background_color: '#0F172A',

@@ -200,6 +200,14 @@ export const ProfileTab: React.FC = () => {
         </button>
       </div>
 
+      {/* App Branding & Version Footer */}
+      <div className="flex flex-col items-center justify-center pt-2 pb-6 text-center border-t border-slate-800/60">
+        <img src="/logo.svg" alt="MainBola" className="h-8 w-auto opacity-80 mb-2" />
+        <div className="text-[11px] text-slate-500 font-mono">
+          MainBola v0.2.1 • PWA Football Manager Lite
+        </div>
+      </div>
+
       {/* Confirmation Modal */}
       {showResetConfirm && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-md p-4">

@@ -1,7 +1,6 @@
 import React from 'react';
 import { BadgeIcon } from '../common/BadgeIcon';
 import { Club } from '@/types';
-import { Shield } from 'lucide-react';
 
 interface HeaderProps {
   club: Club | null;
@@ -38,12 +37,10 @@ export const Header: React.FC<HeaderProps> = ({ club, onOpenProfile }) => {
             </div>
           </div>
         ) : (
-          <div className="flex items-center gap-2">
-            <div className="w-8 h-8 rounded-lg bg-emerald-500/20 border border-emerald-500/30 flex items-center justify-center text-emerald-400">
-              <Shield className="w-4 h-4" />
-            </div>
+          <div className="flex items-center gap-2.5">
+            <img src="/favicon.svg" alt="MainBola" className="w-7 h-7 rounded-lg" />
             <span className="text-sm font-black tracking-wider uppercase bg-gradient-to-r from-emerald-400 to-teal-200 bg-clip-text text-transparent">
-              GOAL RUSH
+              MainBola
             </span>
           </div>
         )}

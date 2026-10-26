@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { BADGE_OPTIONS, BadgeIcon } from './common/BadgeIcon';
-import { Shield, Sparkles } from 'lucide-react';
+import { Sparkles } from 'lucide-react';
 
 interface ClubCreationModalProps {
   onCreateClub: (name: string, primaryColor: string, secondaryColor: string, badgeId: string) => Promise<unknown>;
@@ -50,8 +50,8 @@ export const ClubCreationModal: React.FC<ClubCreationModalProps> = ({ onCreateCl
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-md p-4 overflow-y-auto">
       <div className="bg-navy-900 border border-slate-700/80 rounded-2xl w-full max-w-md p-6 shadow-2xl my-auto animate-in fade-in zoom-in-95 duration-200">
         <div className="text-center mb-6">
-          <div className="inline-flex items-center justify-center w-12 h-12 rounded-2xl bg-emerald-500/10 border border-emerald-500/30 text-emerald-400 mb-3">
-            <Shield className="w-6 h-6" />
+          <div className="flex justify-center mb-3">
+            <img src="/favicon.svg" alt="MainBola" className="w-14 h-14 rounded-2xl shadow-lg shadow-emerald-950/60" />
           </div>
           <h2 className="text-xl font-extrabold text-white tracking-tight">Create Your Football Club</h2>
           <p className="text-xs text-slate-400 mt-1">

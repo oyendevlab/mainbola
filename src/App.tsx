@@ -22,7 +22,7 @@ export const App: React.FC = () => {
       <div className="min-h-screen bg-navy-950 flex flex-col items-center justify-center p-4">
         <Loader2 className="w-10 h-10 text-emerald-400 animate-spin mb-3" />
         <div className="text-sm font-bold text-white tracking-wider uppercase font-mono">
-          Loading GOAL RUSH...
+          Loading MainBola...
         </div>
         <div className="text-xs text-slate-400 mt-1">Accessing local club archives</div>
       </div>

@@ -1,13 +1,14 @@
-# GOAL RUSH: Project Task & Progress Tracker
+# MainBola: Project Task & Progress Tracker
 
-> **Current Version:** `v2.0.0` (Phase 2 Complete)  
+> **Current Version:** `v0.2.1` (Completed)  
+> **Previous Versions:** `v0.1.0` (Phase 1 Complete), `v0.2.0` (Phase 2 Complete)  
 > **Last Updated:** 2026-10-26
 
 ---
 
 ## 📌 Version History & Progress Summary
 
-### 🟢 Version 1.0.0: Functional PWA Vertical Slice (Completed)
+### 🟢 Version 0.1.0: Functional PWA Vertical Slice (Completed)
 *Completed on 2026-10-26 • 57/57 Unit Tests Passing • Playwright E2E Verified*
 
 - [x] **Project Scaffolding & Setup**
@@ -48,7 +49,7 @@
 
 ---
 
-### 🟢 Version 2.0.0: Asynchronous Private Leagues & Competition (Completed)
+### 🟢 Version 0.2.0: Asynchronous Private Leagues & Competition (Completed)
 *Completed on 2026-10-26 • 65/65 Unit Tests Passing • Playwright E2E Verified*
 
 - [x] **1. League Domain Model & Architecture**
@@ -71,11 +72,27 @@
 - [x] **4. Verification & Testing**
   - [x] 8 new unit tests in `src/engine/__tests__/league.test.ts` and `src/store/__tests__/useGameStore.test.ts` (Total: 65 passing tests).
   - [x] Updated Playwright E2E test verifying full League flow: creating a league, viewing standings, locking tactics, simulating a matchday, and viewing a matchday replay.
-  - [x] Production build and PWA cache verification.
 
 ---
 
-## 🔮 Version 3.0.0: Player Progression, Transfers & Cloud Sync (Planned)
+### 🟢 Version 0.2.1: Rebranding to MainBola & App Logo Design (Completed)
+*Completed on 2026-10-26 • 65/65 Unit Tests Passing • Playwright E2E Verified*
+
+- [x] **1. Logo Design Selection & Proposals**:
+  - Presented 3 curated concepts; user selected **"Pixel Bola Sepak"** (Retro 16-bit arcade pixel ball with emerald neon accent).
+- [x] **2. Asset Generation**:
+  - Created vector SVG logo & header branding (`public/logo.svg`, `public/favicon.svg`).
+  - Generated PWA app icons via pixel-accurate PIL: `favicon.ico`, `icon-192.png`, `icon-512.png` (maskable), and `apple-touch-icon.png`.
+- [x] **3. Text & Brand Name Replacement Across Application**:
+  - Replaced "GOAL RUSH" / "GoalRush" with "MainBola" in `package.json`, `index.html`, `vite.config.ts`, `src/App.tsx`, `Header.tsx`, `ClubCreationModal.tsx`, `ProfileTab.tsx`, `simulator.ts`, and test specs.
+- [x] **4. Test & Verification**:
+  - 65/65 unit tests passed.
+  - Production build (`tsc && vite build`) succeeded with 16 precached PWA service worker entries.
+  - Playwright E2E test passed.
+
+---
+
+## 🔮 Version 0.3.0: Player Progression, Transfers & Cloud Sync (Planned)
 - [ ] Training routines to improve player attributes.
 - [ ] Player fatigue, fitness, and injury simulation.
 - [ ] Transfer market & free agent scouting.

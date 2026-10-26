@@ -1,6 +1,6 @@
 import { test, expect } from '@playwright/test';
 
-test.describe('GOAL RUSH PWA Vertical Slice', () => {
+test.describe('MainBola PWA Vertical Slice', () => {
   test('complete core loop: create club, edit tactics, start quick match, see replay & stats, refresh persist', async ({ page }) => {
     page.on('console', (msg) => console.log('PAGE LOG:', msg.text()));
     page.on('pageerror', (err) => console.log('PAGE ERROR:', err.message));
