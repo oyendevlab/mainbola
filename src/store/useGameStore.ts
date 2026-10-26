@@ -19,6 +19,8 @@ import {
   getActiveLeague,
   saveActiveLeague,
   deleteActiveLeague,
+  getTransferMarket,
+  saveTransferMarket,
   resetAllData,
 } from '../storage/db';
 import {
@@ -33,7 +35,20 @@ import {
   calculateLeagueStandings,
   simulateLeagueRound,
 } from '../engine/league';
+import {
+  DRILL_CONFIGS,
+  TEAM_PHYSIO_COST,
+  applyMatchFatigue,
+  fullSquadPhysioRecovery,
+  trainPlayer as executeTrainPlayer,
+} from '../engine/training';
+import {
+  executeBuyPlayer,
+  executeSellPlayer,
+  generateTransferMarket,
+} from '../engine/transfers';
 import { validateSquadSelection } from '../types/formations';
+import { PlayerAttributes, TrainingDrillType, TransferTarget } from '../types';
 
 export type ActiveTab = 'home' | 'squad' | 'match' | 'league' | 'profile';
 
@@ -50,6 +65,7 @@ export interface GameState {
   matchHistory: MatchResult[];
   activeLeague: League | null;
   selectedReplayFixture: LeagueFixture | null;
+  transferTargets: TransferTarget[];
   isLoading: boolean;
   activeTab: ActiveTab;
   currentMatch: MatchResult | null;
@@ -71,6 +87,16 @@ export interface GameState {
   setCurrentMatch: (match: MatchResult | null) => void;
   updateProfile: (updates: Partial<ManagerProfile>) => Promise<void>;
 
+  // Phase 3 Player Progression & Transfer Actions
+  trainPlayer: (
+    playerId: string,
+    drillType: TrainingDrillType
+  ) => Promise<{ success: boolean; message: string; gains?: Partial<PlayerAttributes> }>;
+  teamRecoveryPhysio: () => Promise<{ success: boolean; message: string }>;
+  buyPlayer: (targetId: string) => Promise<{ success: boolean; message: string }>;
+  sellPlayer: (playerId: string) => Promise<{ success: boolean; message: string }>;
+  refreshTransferMarket: () => Promise<void>;
+
   // Phase 2 League Actions
   createLeague: (name: string, teamCount: number) => Promise<League>;
   joinLeagueByCode: (code: string) => Promise<League>;
@@ -86,6 +112,7 @@ export const useGameStore = create<GameState>((set, get) => ({
   matchHistory: [],
   activeLeague: null,
   selectedReplayFixture: null,
+  transferTargets: [],
   isLoading: true,
   activeTab: 'home',
   currentMatch: null,
@@ -93,11 +120,12 @@ export const useGameStore = create<GameState>((set, get) => ({
   initStore: async () => {
     set({ isLoading: true });
     try {
-      const [savedClub, savedProfile, savedMatches, savedLeague] = await Promise.all([
+      const [savedClub, savedProfile, savedMatches, savedLeague, savedMarket] = await Promise.all([
         getClub(),
         getProfile(),
         getMatchHistory(),
         getActiveLeague(),
+        getTransferMarket(),
       ]);
 
       const profile = savedProfile ?? DEFAULT_PROFILE;
@@ -107,11 +135,20 @@ export const useGameStore = create<GameState>((set, get) => ({
         });
       }
 
+      let market = savedMarket;
+      if (!market || market.length === 0) {
+        market = generateTransferMarket();
+        await saveTransferMarket(market).catch((err) => {
+          console.warn('[useGameStore] Failed to save initial transfer market:', err);
+        });
+      }
+
       set({
         club: savedClub,
         profile,
         matchHistory: savedMatches,
         activeLeague: savedLeague,
+        transferTargets: market,
         isLoading: false,
       });
     } catch (err) {
@@ -121,6 +158,7 @@ export const useGameStore = create<GameState>((set, get) => ({
         profile: DEFAULT_PROFILE,
         matchHistory: [],
         activeLeague: null,
+        transferTargets: [],
         isLoading: false,
       });
     }
@@ -196,6 +234,12 @@ export const useGameStore = create<GameState>((set, get) => ({
     const isDraw = teamScore === oppScore;
     const isLoss = teamScore < oppScore;
 
+    // Financial rewards: Win +3500, Draw +1500, Loss +600 gate receipts
+    const prizeMoney = isWin ? 3500 : isDraw ? 1500 : 600;
+
+    // Apply match fatigue to squad: starting XI players fatigue, bench players recover
+    const fatiguedSquad = applyMatchFatigue(club.squad, club.startingXI);
+
     const newStats: ClubStats = {
       played: club.stats.played + 1,
       won: club.stats.won + (isWin ? 1 : 0),
@@ -208,6 +252,8 @@ export const useGameStore = create<GameState>((set, get) => ({
     const updatedClub: Club = {
       ...club,
       stats: newStats,
+      budget: (club.budget ?? 50000) + prizeMoney,
+      squad: fatiguedSquad,
     };
 
     const newLevel = isWin
@@ -243,6 +289,7 @@ export const useGameStore = create<GameState>((set, get) => ({
       matchHistory: [],
       activeLeague: null,
       selectedReplayFixture: null,
+      transferTargets: [],
       currentMatch: null,
       activeTab: 'home',
     });
@@ -264,6 +311,130 @@ export const useGameStore = create<GameState>((set, get) => ({
     };
     await saveProfile(updated);
     set({ profile: updated });
+  },
+
+  // ============================================================================
+  // Phase 3 Player Progression & Transfers
+  // ============================================================================
+
+  trainPlayer: async (playerId: string, drillType: TrainingDrillType) => {
+    const { club } = get();
+    if (!club) return { success: false, message: 'No active club found.' };
+
+    const config = DRILL_CONFIGS[drillType];
+    if (club.budget < config.cost) {
+      return {
+        success: false,
+        message: `Insufficient funds! Requires ${config.cost.toLocaleString()} credits (Available: ${club.budget.toLocaleString()}).`,
+      };
+    }
+
+    const playerIndex = club.squad.findIndex((p) => p.id === playerId);
+    if (playerIndex === -1) {
+      return { success: false, message: 'Player not found in squad.' };
+    }
+
+    const targetPlayer = club.squad[playerIndex];
+    const { player: trainedPlayer, result } = executeTrainPlayer(targetPlayer, drillType);
+
+    const updatedSquad = [...club.squad];
+    updatedSquad[playerIndex] = trainedPlayer;
+
+    const updatedClub: Club = {
+      ...club,
+      budget: club.budget - config.cost,
+      squad: updatedSquad,
+    };
+
+    await saveClub(updatedClub);
+    set({ club: updatedClub });
+
+    const gainSummary = Object.entries(result.statGains)
+      .map(([k, v]) => `+${v} ${k}`)
+      .join(', ');
+
+    return {
+      success: true,
+      message:
+        drillType === 'PHYSIO'
+          ? `Physio complete! ${trainedPlayer.name} recovered to ${trainedPlayer.fitness}% fitness.`
+          : `Training drill complete! ${trainedPlayer.name}: ${gainSummary || 'sharpness maintained'} (${trainedPlayer.overallRating} OVR).`,
+      gains: result.statGains,
+    };
+  },
+
+  teamRecoveryPhysio: async () => {
+    const { club } = get();
+    if (!club) return { success: false, message: 'No active club found.' };
+
+    if (club.budget < TEAM_PHYSIO_COST) {
+      return {
+        success: false,
+        message: `Insufficient funds! Requires ${TEAM_PHYSIO_COST.toLocaleString()} credits for squad clinic (Available: ${club.budget.toLocaleString()}).`,
+      };
+    }
+
+    const refreshedSquad = fullSquadPhysioRecovery(club.squad);
+    const updatedClub: Club = {
+      ...club,
+      budget: club.budget - TEAM_PHYSIO_COST,
+      squad: refreshedSquad,
+    };
+
+    await saveClub(updatedClub);
+    set({ club: updatedClub });
+
+    return {
+      success: true,
+      message: 'Full team physio completed! All 15+ squad members restored to 100% match fitness.',
+    };
+  },
+
+  buyPlayer: async (targetId: string) => {
+    const { club, transferTargets } = get();
+    if (!club) return { success: false, message: 'No active club found.' };
+
+    const target = transferTargets.find((t) => t.id === targetId);
+    if (!target) return { success: false, message: 'Scouted target no longer available.' };
+
+    const outcome = executeBuyPlayer(club, target);
+    if (!outcome.success) {
+      return outcome;
+    }
+
+    const remainingTargets = transferTargets.filter((t) => t.id !== targetId);
+    await Promise.all([
+      saveClub(outcome.club),
+      saveTransferMarket(remainingTargets),
+    ]);
+
+    set({
+      club: outcome.club,
+      transferTargets: remainingTargets,
+    });
+
+    return outcome;
+  },
+
+  sellPlayer: async (playerId: string) => {
+    const { club } = get();
+    if (!club) return { success: false, message: 'No active club found.' };
+
+    const outcome = executeSellPlayer(club, playerId);
+    if (!outcome.success) {
+      return outcome;
+    }
+
+    await saveClub(outcome.club);
+    set({ club: outcome.club });
+
+    return outcome;
+  },
+
+  refreshTransferMarket: async () => {
+    const newMarket = generateTransferMarket();
+    await saveTransferMarket(newMarket);
+    set({ transferTargets: newMarket });
   },
 
   // ============================================================================

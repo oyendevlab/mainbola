@@ -62,13 +62,22 @@ function calculateTeamStrengths(startingXI: Player[]): TeamStrengths {
   const mids = startingXI.filter((p) => p.position === 'MID');
   const atts = startingXI.filter((p) => p.position === 'ATT');
 
+  // Fitness impact: 100% fitness = 1.0 multiplier; 50% fitness = 0.825 multiplier
+  const getEffective = (p: Player) =>
+    p.fitness !== undefined
+      ? p.overallRating * (0.65 + 0.35 * (p.fitness / 100))
+      : p.overallRating;
+
   const avgRating = (players: Player[], defaultVal = 65) =>
     players.length > 0
-      ? players.reduce((sum, p) => sum + p.overallRating, 0) / players.length
+      ? players.reduce((sum, p) => sum + getEffective(p), 0) / players.length
       : defaultVal;
 
   const avgGk = gks.length > 0
-    ? gks.reduce((sum, p) => sum + p.attributes.goalkeeping, 0) / gks.length
+    ? gks.reduce((sum, p) => {
+        const gkFit = p.fitness !== undefined ? 0.7 + 0.3 * (p.fitness / 100) : 1.0;
+        return sum + p.attributes.goalkeeping * gkFit;
+      }, 0) / gks.length
     : 65;
 
   return {

@@ -1,11 +1,13 @@
 import { openDB, DBSchema, IDBPDatabase } from 'idb';
-import { Club, ManagerProfile, MatchResult } from '../types';
+import { Club, ManagerProfile, MatchResult, TransferTarget } from '../types';
 import { League } from '../types/league';
+import { calculatePlayerMarketValue } from '../engine/generator';
 
 export const DB_NAME = 'goal_rush_db';
-export const DB_VERSION = 2;
+export const DB_VERSION = 3;
 export const ACTIVE_CLUB_KEY = 'active_club';
 export const ACTIVE_LEAGUE_KEY = 'active_league';
+export const TRANSFER_MARKET_KEY = 'active_market';
 export const PROFILE_KEY = 'profile';
 
 export interface GoalRushDBSchema extends DBSchema {
@@ -31,6 +33,10 @@ export interface GoalRushDBSchema extends DBSchema {
   leagues: {
     key: string;
     value: League;
+  };
+  transfers: {
+    key: string;
+    value: TransferTarget[];
   };
 }
 
@@ -69,6 +75,10 @@ export async function getDb(): Promise<IDBPDatabase<GoalRushDBSchema>> {
 
         if (!db.objectStoreNames.contains('leagues')) {
           db.createObjectStore('leagues');
+        }
+
+        if (!db.objectStoreNames.contains('transfers')) {
+          db.createObjectStore('transfers');
         }
       },
       blocked() {
@@ -122,6 +132,21 @@ export function closeDb(): void {
 // Club Persistence
 // ============================================================================
 
+function normalizeClub(club: Club): Club {
+  if (club.budget === undefined) {
+    club.budget = 50000;
+  }
+  if (Array.isArray(club.squad)) {
+    club.squad = club.squad.map((p) => ({
+      ...p,
+      fitness: p.fitness ?? 100,
+      trainingXp: p.trainingXp ?? 0,
+      marketValue: p.marketValue ?? calculatePlayerMarketValue(p.overallRating),
+    }));
+  }
+  return club;
+}
+
 /**
  * Retrieve the active user club from IndexedDB.
  */
@@ -129,11 +154,11 @@ export async function getClub(): Promise<Club | null> {
   try {
     const db = await getDb();
     const club = await db.get('clubs', ACTIVE_CLUB_KEY);
-    if (club) return club;
+    if (club) return normalizeClub(club);
 
     // Fallback: if 'active_club' key is not found, check if any club exists
     const allClubs = await db.getAll('clubs');
-    return allClubs.length > 0 ? allClubs[0] : null;
+    return allClubs.length > 0 ? normalizeClub(allClubs[0]) : null;
   } catch (err) {
     console.error('[IndexedDB] getClub error:', err);
     return null;
@@ -321,16 +346,46 @@ export async function deleteActiveLeague(): Promise<void> {
 }
 
 // ============================================================================
+// Transfer Market Persistence
+// ============================================================================
+
+/**
+ * Retrieve current scouted transfer targets from IndexedDB.
+ */
+export async function getTransferMarket(): Promise<TransferTarget[] | null> {
+  try {
+    const db = await getDb();
+    const market = await db.get('transfers', TRANSFER_MARKET_KEY);
+    return market ?? null;
+  } catch (err) {
+    console.error('[IndexedDB] getTransferMarket error:', err);
+    return null;
+  }
+}
+
+/**
+ * Save current scouted transfer targets in IndexedDB.
+ */
+export async function saveTransferMarket(targets: TransferTarget[]): Promise<void> {
+  try {
+    const db = await getDb();
+    await db.put('transfers', targets, TRANSFER_MARKET_KEY);
+  } catch (err) {
+    console.error('[IndexedDB] saveTransferMarket error:', err);
+  }
+}
+
+// ============================================================================
 // Reset and Maintenance
 // ============================================================================
 
 /**
- * Safely clears all object stores (clubs, manager, matches, settings, leagues) in a single transaction.
+ * Safely clears all object stores in a single transaction.
  */
 export async function resetAllData(): Promise<void> {
   try {
     const db = await getDb();
-    const stores = ['clubs', 'manager', 'matches', 'settings', 'leagues'] as const;
+    const stores = ['clubs', 'manager', 'matches', 'settings', 'leagues', 'transfers'] as const;
     const existingStores = stores.filter((s) => db.objectStoreNames.contains(s));
     const tx = db.transaction(existingStores, 'readwrite');
     await Promise.all([

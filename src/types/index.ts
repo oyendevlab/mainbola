@@ -15,6 +15,9 @@ export interface Player {
   position: PlayerPosition;
   attributes: PlayerAttributes;
   overallRating: number;
+  fitness?: number; // 0 - 100%, defaults to 100
+  trainingXp?: number; // Accumulated XP towards attribute improvements
+  marketValue?: number; // Value in MainBola credits
 }
 
 export type FormationType = '4-3-3' | '4-4-2' | '4-2-3-1';
@@ -49,6 +52,7 @@ export interface Club {
   startingXI: string[]; // 11 Player IDs
   tactics: TacticalStyle;
   stats: ClubStats;
+  budget: number; // Club finances in MainBola Credits (default 50000)
   createdAt: number;
 }
 
@@ -122,4 +126,38 @@ export interface ManagerProfile {
   soundEnabled: boolean;
   replaySpeed: 1 | 2 | 4;
 }
+
+// Player Progression & Training
+export type TrainingDrillType = 'ATTACKING' | 'DEFENDING' | 'PLAYMAKING' | 'GOALKEEPING' | 'PHYSIO';
+
+export interface DrillConfig {
+  id: TrainingDrillType;
+  name: string;
+  cost: number;
+  description: string;
+  primaryAttr: keyof PlayerAttributes;
+  secondaryAttr?: keyof PlayerAttributes;
+  suitablePositions: PlayerPosition[];
+}
+
+export interface TrainingResult {
+  playerId: string;
+  playerName: string;
+  drillType: TrainingDrillType;
+  cost: number;
+  statGains: Partial<PlayerAttributes>;
+  newRating: number;
+  newFitness?: number;
+}
+
+// Transfer Market & Scouting
+export interface TransferTarget {
+  id: string;
+  player: Player;
+  fee: number;
+  scoutReport: string;
+  age: number;
+  potentialRating: number;
+}
+
 export * from './league';

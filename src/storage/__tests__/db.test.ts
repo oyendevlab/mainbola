@@ -42,6 +42,7 @@ describe('IndexedDB Persistence Layer (db.ts)', () => {
     formation: '4-3-3',
     startingXI: ['ply_1'],
     tactics: 'Attacking',
+    budget: 50000,
     stats: {
       played: 5,
       won: 4,

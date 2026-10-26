@@ -112,5 +112,32 @@ test.describe('MainBola PWA Vertical Slice', () => {
     // Replay modal opened
     await expect(page.locator('text=Matchday 1 Replay')).toBeVisible();
     await page.locator('button:has-text("Close Replay")').click();
+
+    // 10. Phase 3: Player Training & Transfer Market Flow
+    await page.getByRole('button', { name: 'Squad', exact: true }).click();
+
+    // Go to Training Ground sub-tab
+    await page.getByRole('button', { name: 'Latihan', exact: true }).click();
+    await expect(page.locator('text=Klinik Fisioterapi Pasukan')).toBeVisible();
+    await expect(page.locator('text=Pilih Modul Latihan')).toBeVisible();
+
+    // Run training drill on first player
+    const trainFirstBtn = page.getByRole('button', { name: 'Latih', exact: true }).first();
+    await trainFirstBtn.click();
+    await expect(page.locator('text=complete')).toBeVisible();
+
+    // Go to Transfer Market sub-tab
+    await page.getByRole('button', { name: 'Pasaran', exact: true }).click();
+    await expect(page.locator('text=Pusat Pemindahan & Bakat')).toBeVisible();
+    await expect(page.locator('text=Calon Bakat Ditemui Pengakap')).toBeVisible();
+
+    // Sign a scouted transfer player
+    const signBtn = page.getByRole('button', { name: /Tandatangani/ }).first();
+    await expect(signBtn).toBeVisible();
+    await signBtn.click();
+    await expect(page.locator('text=Signed')).toBeVisible();
+
+    // Verify squad capacity updated to 16 / 20
+    await expect(page.locator('text=Kapasiti Skuad: 16 / 20')).toBeVisible();
   });
 });

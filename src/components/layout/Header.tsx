@@ -1,6 +1,7 @@
 import React from 'react';
 import { BadgeIcon } from '../common/BadgeIcon';
 import { Club } from '@/types';
+import { Coins } from 'lucide-react';
 
 interface HeaderProps {
   club: Club | null;
@@ -47,7 +48,15 @@ export const Header: React.FC<HeaderProps> = ({ club, onOpenProfile }) => {
 
         {/* Club Quick Stats / Tag */}
         {club && (
-          <div className="flex items-center gap-3">
+          <div className="flex items-center gap-2 sm:gap-3">
+            {/* Club Budget */}
+            <div className="flex items-center gap-1.5 px-2 py-1 rounded-lg bg-amber-500/10 border border-amber-500/30 text-amber-300">
+              <Coins className="w-3.5 h-3.5 text-amber-400" />
+              <span className="text-xs font-mono font-bold tracking-tight">
+                {(club.budget ?? 50000).toLocaleString()}
+              </span>
+            </div>
+
             <div className="text-right">
               <div className="text-[10px] uppercase font-bold text-slate-400 tracking-wider">Record</div>
               <div className="text-xs font-mono font-bold text-white">

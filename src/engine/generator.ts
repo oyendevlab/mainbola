@@ -179,6 +179,11 @@ export interface GeneratePlayerOptions {
   prng?: PRNG;
 }
 
+export function calculatePlayerMarketValue(overallRating: number): number {
+  const scaled = Math.pow(overallRating / 10, 3.4) * 55;
+  return Math.round(Math.max(2500, scaled) / 250) * 250;
+}
+
 /**
  * Generates a single player with position-appropriate attributes (all 1..100).
  */
@@ -268,6 +273,9 @@ export function generatePlayer(
     position,
     attributes,
     overallRating,
+    fitness: 100,
+    trainingXp: 0,
+    marketValue: calculatePlayerMarketValue(overallRating),
   };
 }
 
@@ -476,6 +484,7 @@ export function generateClub(
       goalsFor: 0,
       goalsAgainst: 0,
     },
+    budget: 50000,
     createdAt: 1700000000000 + (actualSeed % 10000000),
   };
 }

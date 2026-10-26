@@ -1,7 +1,7 @@
 # MainBola: Project Task & Progress Tracker
 
-> **Current Version:** `v0.2.1` (Completed)  
-> **Previous Versions:** `v0.1.0` (Phase 1 Complete), `v0.2.0` (Phase 2 Complete)  
+> **Current Version:** `v0.3.0` (Completed)  
+> **Previous Versions:** `v0.1.0` (Phase 1 Complete), `v0.2.0` (Phase 2 Complete), `v0.2.1` (Rebranding & Logo Complete)  
 > **Last Updated:** 2026-10-26
 
 ---
@@ -92,8 +92,39 @@
 
 ---
 
-## 🔮 Version 0.3.0: Player Progression, Transfers & Cloud Sync (Planned)
-- [ ] Training routines to improve player attributes.
-- [ ] Player fatigue, fitness, and injury simulation.
-- [ ] Transfer market & free agent scouting.
-- [ ] Cloud synchronization & realtime multiplayer websockets for remote invite codes.
+### 🟢 Version 0.3.0: Player Progression, Transfers & Squad Dynamics (Completed)
+*Completed on 2026-10-26 • 74/74 Unit Tests Passing • Playwright E2E Verified*
+
+- [x] **1. Data Model & IndexedDB Migration (Schema v3)**:
+  - Added `fitness: number` (0–100) and `trainingXp: number` to `Player`.
+  - Added `budget: number` (club funds) to `Club` (default 50,000 Credits).
+  - Added `transfers` store to IndexedDB for persistent scout market pool.
+  - Backward-compatible normalization guaranteeing legacy clubs receive default budget ($50,000) and 100% fitness.
+- [x] **2. Training & Progression Engine (`src/engine/training.ts`)**:
+  - Training drills: Attacking, Defensive, Playmaking, Goalkeeping, and Individual Physio.
+  - Attribute progression (+1 to +2) with dynamic overall rating and market valuation recalculation.
+  - Team Physio Recovery clinic for instant full-squad recovery (4,500 Credits).
+- [x] **3. Fatigue & Fitness System**:
+  - Match simulation depletes starting XI player fitness (-15% to -24% based on stamina).
+  - Benched substitutes naturally recover (+20% fitness per match).
+  - Low fitness reduces player effective match attributes during simulation.
+  - Physio recovery session feature for instant squad recovery.
+- [x] **4. Transfer Market & Scouting Engine (`src/engine/transfers.ts`)**:
+  - Dynamic scout market generating 6 fictional free agents across positions.
+  - Valuation algorithm based on rating, age, and attributes.
+  - Buy scouted players and Sell existing squad members with budget updates and minimum 12-player roster safeguard.
+- [x] **5. UI & Squad Management Enhancement (`src/pages/SquadTab.tsx`, `Header.tsx`)**:
+  - Sub-navigation in Squad Tab: **Taktikal & Formasi**, **Pusat Latihan**, and **Pasaran Pemindahan**.
+  - Visual fitness indicators (green/yellow/red) and stat previews on player cards.
+  - Live budget badge in Header with coin icon.
+- [x] **6. Verification & Automated Testing**:
+  - 9 new Vitest unit tests in `src/engine/__tests__/progression.test.ts` (Total: 74 passing tests).
+  - Playwright E2E test covering training a player, verifying attribute gains, and signing a scouted target.
+  - Production PWA build verification (16 precache assets generated).
+
+---
+
+## 🔮 Version 0.4.0: Cloud Sync, Audio FX & Advanced League Multiplayer (Planned)
+- [ ] Realtime multiplayer websockets & cloud sync for remote invite codes.
+- [ ] 8-bit retro sound effects (whistle, cheer, kick, goal horn).
+- [ ] In-depth match commentary engine with crowd animations.

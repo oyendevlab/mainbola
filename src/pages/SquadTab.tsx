@@ -2,11 +2,14 @@ import React, { useState } from 'react';
 import { useGameStore } from '../store/useGameStore';
 import { FormationType, TacticalStyle, Player, PlayerPosition } from '../types';
 import { FORMATION_CONFIGS, validateSquadSelection } from '../types/formations';
-import { Users, Shield, Zap, Compass, CheckCircle2, AlertCircle, ArrowUpDown, Info } from 'lucide-react';
+import { Users, Shield, Zap, Compass, CheckCircle2, AlertCircle, ArrowUpDown, Info, Dumbbell, ShoppingBag } from 'lucide-react';
+import { TrainingView } from '../components/squad/TrainingView';
+import { TransfersView } from '../components/squad/TransfersView';
 
 export const SquadTab: React.FC = () => {
   const { club, updateFormation, updateTactics, setStartingXI } = useGameStore();
 
+  const [activeSubTab, setActiveSubTab] = useState<'lineup' | 'training' | 'transfers'>('lineup');
   const [selectedSlotIndex, setSelectedSlotIndex] = useState<number | null>(null);
   const [filterPos, setFilterPos] = useState<'ALL' | PlayerPosition>('ALL');
   const [inspectedPlayer, setInspectedPlayer] = useState<Player | null>(null);
@@ -85,9 +88,55 @@ export const SquadTab: React.FC = () => {
   );
 
   return (
-    <div className="space-y-6 pb-24 animate-in fade-in duration-200">
-      {/* Formation & Tactics Selector Bar */}
-      <div className="rounded-2xl bg-navy-900 border border-slate-800 p-4 shadow-xl space-y-4">
+    <div className="space-y-5 pb-24 animate-in fade-in duration-200">
+      {/* Squad Sub-Navigation Switcher */}
+      <div className="grid grid-cols-3 gap-1.5 p-1 bg-navy-900 border border-slate-800 rounded-2xl shadow-lg">
+        <button
+          onClick={() => setActiveSubTab('lineup')}
+          className={`py-2 px-1 text-xs font-bold rounded-xl transition flex items-center justify-center gap-1.5 cursor-pointer ${
+            activeSubTab === 'lineup'
+              ? 'bg-emerald-500 text-navy-950 shadow-md shadow-emerald-500/20'
+              : 'text-slate-400 hover:text-slate-200'
+          }`}
+        >
+          <Compass className="w-3.5 h-3.5" />
+          <span>Taktikal</span>
+        </button>
+        <button
+          onClick={() => setActiveSubTab('training')}
+          className={`py-2 px-1 text-xs font-bold rounded-xl transition flex items-center justify-center gap-1.5 cursor-pointer ${
+            activeSubTab === 'training'
+              ? 'bg-emerald-500 text-navy-950 shadow-md shadow-emerald-500/20'
+              : 'text-slate-400 hover:text-slate-200'
+          }`}
+        >
+          <Dumbbell className="w-3.5 h-3.5" />
+          <span>Latihan</span>
+        </button>
+        <button
+          onClick={() => setActiveSubTab('transfers')}
+          className={`py-2 px-1 text-xs font-bold rounded-xl transition flex items-center justify-center gap-1.5 cursor-pointer ${
+            activeSubTab === 'transfers'
+              ? 'bg-emerald-500 text-navy-950 shadow-md shadow-emerald-500/20'
+              : 'text-slate-400 hover:text-slate-200'
+          }`}
+        >
+          <ShoppingBag className="w-3.5 h-3.5" />
+          <span>Pasaran</span>
+        </button>
+      </div>
+
+      {/* TRAINING GROUND SUB-TAB */}
+      {activeSubTab === 'training' && <TrainingView />}
+
+      {/* TRANSFER MARKET SUB-TAB */}
+      {activeSubTab === 'transfers' && <TransfersView />}
+
+      {/* TACTICS & LINEUP SUB-TAB */}
+      {activeSubTab === 'lineup' && (
+        <div className="space-y-6">
+          {/* Formation & Tactics Selector Bar */}
+          <div className="rounded-2xl bg-navy-900 border border-slate-800 p-4 shadow-xl space-y-4">
         <div className="flex flex-col sm:flex-row gap-3">
           {/* Formation Dropdown */}
           <div className="flex-1">
@@ -384,8 +433,12 @@ export const SquadTab: React.FC = () => {
                         </span>
                       )}
                     </div>
-                    <div className="text-[10px] text-slate-400 font-mono mt-0.5">
-                      SPD {player.attributes.speed} • PAS {player.attributes.passing} • DEF {player.attributes.defense} • ATT {player.attributes.attack}
+                    <div className="text-[10px] text-slate-400 font-mono mt-0.5 flex items-center gap-1.5 flex-wrap">
+                      <span>SPD {player.attributes.speed} • PAS {player.attributes.passing} • DEF {player.attributes.defense} • ATT {player.attributes.attack}</span>
+                      <span>•</span>
+                      <span className={`font-bold ${(player.fitness ?? 100) >= 80 ? 'text-emerald-400' : (player.fitness ?? 100) >= 50 ? 'text-amber-400' : 'text-rose-400'}`}>
+                        ⚡ {player.fitness ?? 100}%
+                      </span>
                     </div>
                   </div>
                 </div>
@@ -402,5 +455,7 @@ export const SquadTab: React.FC = () => {
         </div>
       </div>
     </div>
+    )}
+  </div>
   );
 };
