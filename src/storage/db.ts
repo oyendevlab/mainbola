@@ -1,12 +1,13 @@
 import { openDB, DBSchema, IDBPDatabase } from 'idb';
-import { Club, ManagerProfile, MatchResult, TransferTarget } from '../types';
+import { Club, KnockoutCup, ManagerProfile, MatchResult, TransferTarget } from '../types';
 import { League } from '../types/league';
 import { calculatePlayerMarketValue } from '../engine/generator';
 
 export const DB_NAME = 'goal_rush_db';
-export const DB_VERSION = 3;
+export const DB_VERSION = 4;
 export const ACTIVE_CLUB_KEY = 'active_club';
 export const ACTIVE_LEAGUE_KEY = 'active_league';
+export const ACTIVE_CUP_KEY = 'active_cup';
 export const TRANSFER_MARKET_KEY = 'active_market';
 export const PROFILE_KEY = 'profile';
 
@@ -37,6 +38,10 @@ export interface GoalRushDBSchema extends DBSchema {
   transfers: {
     key: string;
     value: TransferTarget[];
+  };
+  cup: {
+    key: string;
+    value: KnockoutCup;
   };
 }
 
@@ -79,6 +84,10 @@ export async function getDb(): Promise<IDBPDatabase<GoalRushDBSchema>> {
 
         if (!db.objectStoreNames.contains('transfers')) {
           db.createObjectStore('transfers');
+        }
+
+        if (!db.objectStoreNames.contains('cup')) {
+          db.createObjectStore('cup');
         }
       },
       blocked() {
@@ -136,12 +145,32 @@ function normalizeClub(club: Club): Club {
   if (club.budget === undefined) {
     club.budget = 50000;
   }
+  if (!club.facilities) {
+    club.facilities = {
+      stadiumLevel: 1,
+      youthAcademyLevel: 1,
+      medicalLevel: 1,
+    };
+  } else {
+    club.facilities = {
+      stadiumLevel: club.facilities.stadiumLevel ?? 1,
+      youthAcademyLevel: club.facilities.youthAcademyLevel ?? 1,
+      medicalLevel: club.facilities.medicalLevel ?? 1,
+    };
+  }
+  if (club.activeSponsorId === undefined) {
+    club.activeSponsorId = null;
+  }
   if (Array.isArray(club.squad)) {
     club.squad = club.squad.map((p) => ({
       ...p,
       fitness: p.fitness ?? 100,
       trainingXp: p.trainingXp ?? 0,
       marketValue: p.marketValue ?? calculatePlayerMarketValue(p.overallRating),
+      yellowCards: p.yellowCards ?? 0,
+      redCards: p.redCards ?? 0,
+      isSuspended: p.isSuspended ?? false,
+      isYouthProduct: p.isYouthProduct ?? false,
     }));
   }
   return club;
@@ -376,6 +405,49 @@ export async function saveTransferMarket(targets: TransferTarget[]): Promise<voi
 }
 
 // ============================================================================
+// Knockout Cup Persistence
+// ============================================================================
+
+/**
+ * Retrieve the active Knockout Cup tournament from IndexedDB.
+ */
+export async function getActiveCup(): Promise<KnockoutCup | null> {
+  try {
+    const db = await getDb();
+    const cup = await db.get('cup', ACTIVE_CUP_KEY);
+    return cup ?? null;
+  } catch (err) {
+    console.error('[IndexedDB] getActiveCup error:', err);
+    return null;
+  }
+}
+
+/**
+ * Save or update the active Knockout Cup tournament in IndexedDB.
+ */
+export async function saveActiveCup(cup: KnockoutCup): Promise<void> {
+  try {
+    const db = await getDb();
+    await db.put('cup', cup, ACTIVE_CUP_KEY);
+  } catch (err) {
+    console.error('[IndexedDB] saveActiveCup error:', err);
+    throw new Error(`Failed to save active cup: ${err instanceof Error ? err.message : String(err)}`);
+  }
+}
+
+/**
+ * Delete the active Knockout Cup tournament from IndexedDB.
+ */
+export async function deleteActiveCup(): Promise<void> {
+  try {
+    const db = await getDb();
+    await db.delete('cup', ACTIVE_CUP_KEY);
+  } catch (err) {
+    console.error('[IndexedDB] deleteActiveCup error:', err);
+  }
+}
+
+// ============================================================================
 // Reset and Maintenance
 // ============================================================================
 
@@ -385,7 +457,7 @@ export async function saveTransferMarket(targets: TransferTarget[]): Promise<voi
 export async function resetAllData(): Promise<void> {
   try {
     const db = await getDb();
-    const stores = ['clubs', 'manager', 'matches', 'settings', 'leagues', 'transfers'] as const;
+    const stores = ['clubs', 'manager', 'matches', 'settings', 'leagues', 'transfers', 'cup'] as const;
     const existingStores = stores.filter((s) => db.objectStoreNames.contains(s));
     const tx = db.transaction(existingStores, 'readwrite');
     await Promise.all([

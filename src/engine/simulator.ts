@@ -468,6 +468,33 @@ export function simulateMatch(
           fromCoords: { x: defX, y: defY },
           toCoords: { x: defX + prng.nextFloat(-5, 5), y: defY + prng.nextFloat(-5, 5) },
         });
+
+        // Chance of foul resulting in YELLOW_CARD or RED_CARD
+        const cardRoll = prng.next();
+        if (cardRoll < 0.14) {
+          const isRed = cardRoll < 0.02;
+          const cardType = isRed ? 'RED_CARD' : 'YELLOW_CARD';
+          const cardDesc = isRed
+            ? `RED CARD! ${defender.name} is sent off for a reckless, dangerous tackle on ${passer.name}!`
+            : `YELLOW CARD! ${defender.name} is booked for a cynical challenge on ${passer.name}.`;
+
+          advanceTime(1, 4);
+          const cardTime = getMinuteSecond();
+
+          pushEvent({
+            minute: cardTime.minute,
+            second: cardTime.second,
+            type: cardType,
+            teamId: defendingClub.id,
+            playerId: defender.id,
+            playerName: defender.name,
+            secondaryPlayerId: passer.id,
+            secondaryPlayerName: passer.name,
+            description: cardDesc,
+            fromCoords: { x: defX, y: defY },
+            toCoords: { x: defX, y: defY },
+          });
+        }
       } else if (actionRoll < 0.8) {
         // INTERCEPTION
         const interceptTemplate = prng.pick(INTERCEPTION_TEMPLATES);

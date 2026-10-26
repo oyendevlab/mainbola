@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import { useGameStore } from '../store/useGameStore';
 import { BadgeIcon } from '../components/common/BadgeIcon';
 import { PhaserGame } from '../renderer/PhaserGame';
+import { KnockoutCupView } from '../components/cup/KnockoutCupView';
 import {
   Trophy,
   KeyRound,
@@ -42,6 +43,7 @@ export const LeagueTab: React.FC = () => {
   const [activeSubTab, setActiveSubTab] = useState<'standings' | 'fixtures' | 'scorers'>('standings');
   const [selectedRound, setSelectedRound] = useState(activeLeague?.currentRound || 1);
   const [inspectingFixture, setInspectingFixture] = useState<LeagueFixture | null>(null);
+  const [tournamentMode, setTournamentMode] = useState<'league' | 'cup'>('league');
 
   if (!club) return null;
 
@@ -90,10 +92,38 @@ export const LeagueTab: React.FC = () => {
 
   return (
     <div className="space-y-6 pb-24 animate-in fade-in duration-200">
-      {/* ========================================================================= */}
-      {/* 1. NO ACTIVE LEAGUE: CREATE OR JOIN A PRIVATE LEAGUE                      */}
-      {/* ========================================================================= */}
-      {!activeLeague ? (
+      {/* Tournament Navigation: Liga Utama vs Piala MainBola */}
+      <div className="flex bg-navy-900 p-1.5 rounded-2xl border border-slate-800 shadow-lg">
+        <button
+          onClick={() => setTournamentMode('league')}
+          className={`flex-1 py-2.5 px-3 rounded-xl font-extrabold text-xs transition flex items-center justify-center gap-2 cursor-pointer ${
+            tournamentMode === 'league'
+              ? 'bg-emerald-500 text-navy-950 shadow-md shadow-emerald-500/10'
+              : 'text-slate-400 hover:text-white'
+          }`}
+        >
+          <span>🏆 Liga Utama</span>
+        </button>
+        <button
+          onClick={() => setTournamentMode('cup')}
+          className={`flex-1 py-2.5 px-3 rounded-xl font-extrabold text-xs transition flex items-center justify-center gap-2 cursor-pointer ${
+            tournamentMode === 'cup'
+              ? 'bg-amber-500 text-navy-950 shadow-md shadow-amber-500/10'
+              : 'text-slate-400 hover:text-white'
+          }`}
+        >
+          <span>🥇 Piala MainBola (Kalah Mati)</span>
+        </button>
+      </div>
+
+      {tournamentMode === 'cup' ? (
+        <KnockoutCupView />
+      ) : (
+        <>
+          {/* ========================================================================= */}
+          {/* 1. NO ACTIVE LEAGUE: CREATE OR JOIN A PRIVATE LEAGUE                      */}
+          {/* ========================================================================= */}
+          {!activeLeague ? (
         <div className="space-y-6">
           {/* Header Banner */}
           <div className="relative overflow-hidden rounded-2xl bg-gradient-to-br from-navy-900 to-navy-950 border border-slate-800 p-5 shadow-xl">
@@ -717,6 +747,8 @@ export const LeagueTab: React.FC = () => {
             </button>
           </div>
         </div>
+      )}
+        </>
       )}
     </div>
   );

@@ -1,8 +1,8 @@
 # MainBola: Project Task & Progress Tracker
 
-> **Current Version:** `v0.4.0` (Completed)  
-> **Previous Versions:** `v0.1.0` (Phase 1 Complete), `v0.2.0` (Phase 2 Complete), `v0.2.1` (Rebranding & Logo Complete), `v0.3.0` (Player Progression & Transfers Complete)  
-> **Last Updated:** 2026-10-26
+> **Current Version:** `v0.5.0` (Completed)  
+> **Previous Versions:** `v0.1.0` (Phase 1 Complete), `v0.2.0` (Phase 2 Complete), `v0.2.1` (Rebranding & Logo Complete), `v0.3.0` (Player Progression & Transfers Complete), `v0.4.0` (Audio & Trophies Complete)  
+> **Last Updated:** 2026-10-27
 
 ---
 
@@ -160,4 +160,39 @@
 
 ---
 
-## 🔮 Version 0.5.0: Cloud Sync, Multiplayer WebSockets & Custom Tournaments (Planned)
+### 🟢 Version 0.5.0: Club Infrastructure, Knockout Cup, Sponsorships, Discipline & Match Sharing (Completed)
+*Completed on 2026-10-27 • 137/137 Unit Tests Passing • Playwright E2E Verified*
+
+- [x] **1. Club Infrastructure & Facility Engine (`src/engine/facilities.ts`, `src/types/index.ts`)**:
+  - [x] Stadium upgrades (Levels 1–5): Capacity up to 50,000 seats, automated gate receipts on Home matches (+RM2,000 to +RM22,000 per home fixture).
+  - [x] Youth Academy upgrades (Levels 1–3): Scouting and promoting 16–18 year old prodigies with high potential ratings directly into squad.
+  - [x] Medical Centre upgrades (Levels 1–3): Passive stamina & fatigue recovery bonus (+5% to +15%).
+  - [x] Interactive UI component `ClubFacilitiesSection` integrated into Home tab.
+- [x] **2. Knockout Cup Tournament — Piala MainBola (`src/engine/cup.ts`, `src/types/cup.ts`, `src/components/cup/KnockoutCupView.tsx`)**:
+  - [x] 8-team single-elimination tournament bracket: Suku Akhir ➡️ Separuh Akhir ➡️ Pentas Akhir.
+  - [x] Extra Time & Sudden-Death Penalty Shootout logic for drawn knockout fixtures.
+  - [x] Full 2D pixel-art Phaser match replay integration for Cup matches.
+  - [x] Champion reward: RM35,000 credit prize, winner announcement banner, and "Juara Piala MainBola" trophy.
+  - [x] Sub-navigation toggle in League tab between "🏆 Liga Utama" and "🥇 Piala MainBola (Kalah Mati)".
+- [x] **3. Official Club Sponsorships & Match Bonuses (`src/engine/sponsors.ts`)**:
+  - [x] Sponsor tiers: Local Bakery (Bronze), Tech Startup (Silver), Global Airlines (Gold).
+  - [x] Upfront signing bonuses, per-win bonuses, and clean-sheet rewards credited directly to club budget upon match recording.
+- [x] **4. Disciplinary System & In-Match Cards (`src/engine/simulator.ts`, `src/types/index.ts`)**:
+  - [x] Added `YELLOW_CARD` and `RED_CARD` event simulation based on deterministic seed.
+  - [x] 1-match suspension automatically triggered on 2 yellow cards or 1 straight red card.
+  - [x] Visual disciplinary indicators (`Digantung`, `🟨`, `🟥`) on squad cards.
+- [x] **5. Replay Sharing & Full Game Save Backup (`src/engine/sharing.ts`, `src/pages/ProfileTab.tsx`)**:
+  - [x] Export game save to `.json` file and clipboard copy.
+  - [x] Import game save with schema validation and error feedback.
+  - [x] Deterministic match replay sharing code encoder & decoder (`MBR1_` base64 token).
+- [x] **6. Storage & Database Migration (IndexedDB v4)**:
+  - [x] Upgraded schema to `DB_VERSION = 4` with new `cup` object store.
+  - [x] Backward-compatibility normalization ensuring existing clubs safely receive default level 1 facilities and null sponsor.
+- [x] **7. Verification & Testing**:
+  - [x] 31 new unit tests (Total: 137 passing tests across 13 test suites).
+  - [x] Playwright E2E browser test passing (covering facilities, cup tab, data export, squad actions).
+  - [x] Production build (`tsc && vite build`) passed with 16 precached PWA service worker entries.
+
+---
+
+## 🔮 Version 0.6.0: Cloud Sync, Multiplayer WebSockets & Custom Tournaments (Planned)

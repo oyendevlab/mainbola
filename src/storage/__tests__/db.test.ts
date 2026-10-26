@@ -11,10 +11,13 @@ import {
   getSetting,
   saveSetting,
   deleteSetting,
+  getActiveCup,
+  saveActiveCup,
+  deleteActiveCup,
   resetAllData,
   closeDb,
 } from '../db';
-import { Club, ManagerProfile, MatchResult } from '../../types';
+import { Club, KnockoutCup, ManagerProfile, MatchResult } from '../../types';
 
 describe('IndexedDB Persistence Layer (db.ts)', () => {
   const dummyClub: Club = {
@@ -207,6 +210,40 @@ describe('IndexedDB Persistence Layer (db.ts)', () => {
     it('returns defaultValue if key does not exist', async () => {
       const val = await getSetting<number>('non_existent', 99);
       expect(val).toBe(99);
+    });
+  });
+
+  describe('Knockout Cup store', () => {
+    const dummyCup: KnockoutCup = {
+      id: 'cup_test_1',
+      name: 'Piala MainBola',
+      season: 1,
+      status: 'active',
+      currentRound: 'Quarter',
+      currentRoundIndex: 0,
+      teams: [],
+      matches: [],
+      createdAt: 1700000000000,
+    };
+
+    it('returns null when no cup is saved', async () => {
+      const cup = await getActiveCup();
+      expect(cup).toBeNull();
+    });
+
+    it('saves and retrieves active cup correctly', async () => {
+      await saveActiveCup(dummyCup);
+      const retrieved = await getActiveCup();
+      expect(retrieved).not.toBeNull();
+      expect(retrieved?.id).toBe('cup_test_1');
+      expect(retrieved?.name).toBe('Piala MainBola');
+    });
+
+    it('deletes active cup successfully', async () => {
+      await saveActiveCup(dummyCup);
+      await deleteActiveCup();
+      const retrieved = await getActiveCup();
+      expect(retrieved).toBeNull();
     });
   });
 

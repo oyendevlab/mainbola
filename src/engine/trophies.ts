@@ -1,4 +1,4 @@
-import { Club, MatchResult, Trophy } from '../types';
+import { Club, MatchResult, Trophy, KnockoutCup } from '../types';
 import { League } from '../types/league';
 
 /**
@@ -11,6 +11,13 @@ export const TROPHY_DEFINITIONS: Record<string, Trophy> = {
     description: 'Menjuarai musim Liga Perdana di tangga teratas takhta liga.',
     icon: '🏆',
     category: 'LEAGUE',
+  },
+  CUP_CHAMPION: {
+    id: 'CUP_CHAMPION',
+    title: 'Juara Piala MainBola',
+    description: 'Menjuarai kejohanan kalah mati Piala MainBola.',
+    icon: '🥇',
+    category: 'CUP',
   },
   GOLDEN_BOOT: {
     id: 'GOLDEN_BOOT',
@@ -70,7 +77,8 @@ export const hasTrophy = (trophies: Trophy[], trophyId: string): boolean => {
 export function evaluateUnlockedTrophies(
   club: Club,
   league?: League | null,
-  history: MatchResult[] = []
+  history: MatchResult[] = [],
+  cup?: KnockoutCup | null
 ): Trophy[] {
   const unlocked: Trophy[] = [];
   const now = Date.now();
@@ -157,6 +165,14 @@ export function evaluateUnlockedTrophies(
     }
   }
 
+  // 6. CUP_CHAMPION: Knockout Cup Champion
+  if (cup && cup.status === 'completed' && cup.winnerClubId === club.id) {
+    unlocked.push({
+      ...TROPHY_DEFINITIONS.CUP_CHAMPION,
+      unlockedAt: getLatestTimestamp(),
+    });
+  }
+
   return unlocked;
 }
 
@@ -167,7 +183,8 @@ export function calculateTrophyProgress(
   trophyId: string,
   club: Club,
   league?: League | null,
-  history: MatchResult[] = []
+  history: MatchResult[] = [],
+  cup?: KnockoutCup | null
 ): { current: number; target: number; percentage: number; isCompleted: boolean } {
   switch (trophyId) {
     case 'TACTICIAN': {
@@ -235,6 +252,17 @@ export function calculateTrophyProgress(
         topScorer.clubName === club.name ||
         club.squad.some((p) => p.id === topScorer.playerId || p.name === topScorer.playerName);
       const isWon = league.status === 'completed' && belongsToClub && topScorer.goals > 0;
+      return {
+        current: isWon ? 1 : 0,
+        target: 1,
+        percentage: isWon ? 100 : 0,
+        isCompleted: isWon,
+      };
+    }
+
+    case 'CUP_CHAMPION': {
+      if (!cup) return { current: 0, target: 1, percentage: 0, isCompleted: false };
+      const isWon = cup.status === 'completed' && cup.winnerClubId === club.id;
       return {
         current: isWon ? 1 : 0,
         target: 1,

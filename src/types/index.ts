@@ -18,6 +18,12 @@ export interface Player {
   fitness?: number; // 0 - 100%, defaults to 100
   trainingXp?: number; // Accumulated XP towards attribute improvements
   marketValue?: number; // Value in MainBola credits
+  yellowCards?: number;
+  redCards?: number;
+  isSuspended?: boolean;
+  isYouthProduct?: boolean;
+  age?: number;
+  potentialRating?: number;
 }
 
 export type FormationType = '4-3-3' | '4-4-2' | '4-2-3-1';
@@ -30,6 +36,25 @@ export interface FormationSlot {
   label: string;
   x: number; // Percentage 0 - 100 on pitch width
   y: number; // Percentage 0 - 100 on pitch height (defenders low, attackers high)
+}
+
+export interface ClubFacilities {
+  stadiumLevel: number; // 1-5
+  youthAcademyLevel: number; // 1-3
+  medicalLevel: number; // 1-3
+}
+
+export type SponsorTier = 'Bronze' | 'Silver' | 'Gold';
+
+export interface SponsorDeal {
+  id: string;
+  name: string;
+  tier: SponsorTier;
+  upfrontBonus: number;
+  winBonus: number;
+  cleanSheetBonus: number;
+  active: boolean;
+  description?: string;
 }
 
 export interface ClubStats {
@@ -54,6 +79,8 @@ export interface Club {
   stats: ClubStats;
   budget: number; // Club finances in MainBola Credits (default 50000)
   createdAt: number;
+  facilities?: ClubFacilities;
+  activeSponsorId?: string | null;
 }
 
 // Match Simulation Event Timeline
@@ -66,6 +93,8 @@ export type MatchEventType =
   | 'SAVE'
   | 'GOAL'
   | 'TURNOVER'
+  | 'YELLOW_CARD'
+  | 'RED_CARD'
   | 'HALFTIME'
   | 'FULLTIME';
 
@@ -171,4 +200,5 @@ export interface Trophy {
 }
 
 export * from './league';
+export * from './cup';
 

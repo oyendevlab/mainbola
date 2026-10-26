@@ -4,9 +4,16 @@ import {
   ClubSnapshot,
   ClubStats,
   FormationType,
+  KnockoutCup,
   ManagerProfile,
   MatchResult,
+  Player,
+  PlayerAttributes,
+  SponsorDeal,
   TacticalStyle,
+  TrainingDrillType,
+  TransferTarget,
+  Trophy,
 } from '../types';
 import { League, LeagueFixture } from '../types/league';
 import {
@@ -19,6 +26,8 @@ import {
   getActiveLeague,
   saveActiveLeague,
   deleteActiveLeague,
+  getActiveCup,
+  saveActiveCup,
   getTransferMarket,
   saveTransferMarket,
   resetAllData,
@@ -48,9 +57,21 @@ import {
   generateTransferMarket,
 } from '../engine/transfers';
 import { validateSquadSelection } from '../types/formations';
-import { PlayerAttributes, TrainingDrillType, TransferTarget, Trophy } from '../types';
 import { setSoundEnabled } from '../engine/audio';
 import { evaluateUnlockedTrophies } from '../engine/trophies';
+import {
+  calculateGateReceipts,
+  generateYouthProdigy,
+  upgradeCost,
+} from '../engine/facilities';
+import {
+  advanceCupTournament,
+  createKnockoutCup,
+  CUP_CHAMPION_PRIZE,
+  simulateCupMatch,
+} from '../engine/cup';
+import { calculateSponsorBonus, getSponsorById } from '../engine/sponsors';
+import { exportSaveData, importSaveData } from '../engine/sharing';
 
 export type ActiveTab = 'home' | 'squad' | 'match' | 'league' | 'profile';
 
@@ -66,6 +87,7 @@ export interface GameState {
   profile: ManagerProfile;
   matchHistory: MatchResult[];
   activeLeague: League | null;
+  activeCup: KnockoutCup | null;
   selectedReplayFixture: LeagueFixture | null;
   transferTargets: TransferTarget[];
   unlockedTrophies: Trophy[];
@@ -89,6 +111,24 @@ export interface GameState {
   setActiveTab: (tab: ActiveTab) => void;
   setCurrentMatch: (match: MatchResult | null) => void;
   updateProfile: (updates: Partial<ManagerProfile>) => Promise<void>;
+
+  // Facilities & Sponsorship Actions
+  upgradeFacility: (
+    facility: 'stadium' | 'youthAcademy' | 'medical'
+  ) => Promise<{ success: boolean; message: string; newLevel?: number }>;
+  promoteYouthProdigy: () => Promise<{ success: boolean; message: string; player?: Player }>;
+  signSponsorContract: (
+    sponsorId: string
+  ) => Promise<{ success: boolean; message: string; sponsor?: SponsorDeal }>;
+
+  // Knockout Cup Actions
+  createCupTournament: () => Promise<KnockoutCup>;
+  simulateCupRound: () => Promise<{ success: boolean; message: string }>;
+  claimCupPrize: () => Promise<{ prize: number; success: boolean; message: string }>;
+
+  // Save Data Sharing & Portability
+  exportGameData: () => string;
+  importGameData: (jsonString: string) => Promise<{ success: boolean; message: string }>;
 
   // Phase 4 Trophy & Season Awards
   claimLeaguePrize: () => Promise<{ prize: number; success: boolean; message: string }>;
@@ -118,6 +158,7 @@ export const useGameStore = create<GameState>((set, get) => ({
   profile: DEFAULT_PROFILE,
   matchHistory: [],
   activeLeague: null,
+  activeCup: null,
   selectedReplayFixture: null,
   transferTargets: [],
   unlockedTrophies: [],
@@ -128,12 +169,13 @@ export const useGameStore = create<GameState>((set, get) => ({
   initStore: async () => {
     set({ isLoading: true });
     try {
-      const [savedClub, savedProfile, savedMatches, savedLeague, savedMarket] = await Promise.all([
+      const [savedClub, savedProfile, savedMatches, savedLeague, savedMarket, savedCup] = await Promise.all([
         getClub(),
         getProfile(),
         getMatchHistory(),
         getActiveLeague(),
         getTransferMarket(),
+        getActiveCup(),
       ]);
 
       const profile = savedProfile ?? DEFAULT_PROFILE;
@@ -154,7 +196,7 @@ export const useGameStore = create<GameState>((set, get) => ({
       }
 
       const trophies = savedClub
-        ? evaluateUnlockedTrophies(savedClub, savedLeague, savedMatches)
+        ? evaluateUnlockedTrophies(savedClub, savedLeague, savedMatches, savedCup)
         : [];
 
       set({
@@ -162,6 +204,7 @@ export const useGameStore = create<GameState>((set, get) => ({
         profile,
         matchHistory: savedMatches,
         activeLeague: savedLeague,
+        activeCup: savedCup,
         transferTargets: market,
         unlockedTrophies: trophies,
         isLoading: false,
@@ -173,6 +216,7 @@ export const useGameStore = create<GameState>((set, get) => ({
         profile: DEFAULT_PROFILE,
         matchHistory: [],
         activeLeague: null,
+        activeCup: null,
         transferTargets: [],
         unlockedTrophies: [],
         isLoading: false,
@@ -181,7 +225,16 @@ export const useGameStore = create<GameState>((set, get) => ({
   },
 
   createClub: async (name, primaryColor, secondaryColor, badgeId) => {
-    const newClub = generateClub(name, primaryColor, secondaryColor, badgeId, '4-3-3', 'Balanced');
+    const generated = generateClub(name, primaryColor, secondaryColor, badgeId, '4-3-3', 'Balanced');
+    const newClub: Club = {
+      ...generated,
+      facilities: {
+        stadiumLevel: 1,
+        youthAcademyLevel: 1,
+        medicalLevel: 1,
+      },
+      activeSponsorId: null,
+    };
     await saveClub(newClub);
     set({ club: newClub, activeTab: 'home' });
     return newClub;
@@ -250,11 +303,73 @@ export const useGameStore = create<GameState>((set, get) => ({
     const isDraw = teamScore === oppScore;
     const isLoss = teamScore < oppScore;
 
-    // Financial rewards: Win +3500, Draw +1500, Loss +600 gate receipts
+    // Financial rewards: Win +3500, Draw +1500, Loss +600 base
     const prizeMoney = isWin ? 3500 : isDraw ? 1500 : 600;
 
+    // Ticket revenue from Stadium facilities (Home matches only)
+    const stadiumLevel = club.facilities?.stadiumLevel ?? 1;
+    const gateReceipts = calculateGateReceipts(stadiumLevel, isHome);
+
+    // Sponsorship bonus (Win bonus & Clean sheet bonus)
+    const sponsor = club.activeSponsorId ? getSponsorById(club.activeSponsorId) : null;
+    const sponsorBonus = calculateSponsorBonus(
+      sponsor ? { ...sponsor, active: true } : null,
+      isWin,
+      oppScore === 0
+    );
+
+    const totalMatchIncome = prizeMoney + gateReceipts + sponsorBonus;
+
     // Apply match fatigue to squad: starting XI players fatigue, bench players recover
-    const fatiguedSquad = applyMatchFatigue(club.squad, club.startingXI);
+    let fatiguedSquad = applyMatchFatigue(club.squad, club.startingXI);
+
+    // Apply medical level recovery bonus (+5%, +10%, +15%)
+    const medLevel = club.facilities?.medicalLevel ?? 1;
+    const medBonus = medLevel === 3 ? 4 : medLevel === 2 ? 3 : 1;
+    fatiguedSquad = fatiguedSquad.map((p) => ({
+      ...p,
+      fitness: Math.min(100, (p.fitness ?? 100) + medBonus),
+    }));
+
+    // Discipline tracking: yellow & red card events
+    const cardEvents = result.events.filter(
+      (e) => (e.type === 'YELLOW_CARD' || e.type === 'RED_CARD') && e.teamId === club.id
+    );
+    const redCardedIds = new Set(
+      cardEvents.filter((e) => e.type === 'RED_CARD').map((e) => e.playerId)
+    );
+    const yellowCardedIds = new Set(
+      cardEvents.filter((e) => e.type === 'YELLOW_CARD').map((e) => e.playerId)
+    );
+
+    const updatedSquad = fatiguedSquad.map((player) => {
+      let yellowCards = player.yellowCards ?? 0;
+      let redCards = player.redCards ?? 0;
+      let isSuspended = player.isSuspended ?? false;
+
+      // If player was suspended prior to this match and did not play, suspension served
+      if (isSuspended && !club.startingXI.includes(player.id)) {
+        isSuspended = false;
+      }
+
+      if (redCardedIds.has(player.id)) {
+        redCards += 1;
+        isSuspended = true;
+      }
+      if (yellowCardedIds.has(player.id)) {
+        yellowCards += 1;
+        if (yellowCards % 2 === 0) {
+          isSuspended = true;
+        }
+      }
+
+      return {
+        ...player,
+        yellowCards,
+        redCards,
+        isSuspended,
+      };
+    });
 
     const newStats: ClubStats = {
       played: club.stats.played + 1,
@@ -268,8 +383,8 @@ export const useGameStore = create<GameState>((set, get) => ({
     const updatedClub: Club = {
       ...club,
       stats: newStats,
-      budget: (club.budget ?? 50000) + prizeMoney,
-      squad: fatiguedSquad,
+      budget: (club.budget ?? 50000) + totalMatchIncome,
+      squad: updatedSquad,
     };
 
     const newLevel = isWin
@@ -282,8 +397,13 @@ export const useGameStore = create<GameState>((set, get) => ({
     };
 
     const updatedHistory = [result, ...matchHistory];
-    const { activeLeague } = get();
-    const updatedTrophies = evaluateUnlockedTrophies(updatedClub, activeLeague, updatedHistory);
+    const { activeLeague, activeCup } = get();
+    const updatedTrophies = evaluateUnlockedTrophies(
+      updatedClub,
+      activeLeague,
+      updatedHistory,
+      activeCup
+    );
 
     await Promise.all([
       saveClub(updatedClub),
@@ -307,6 +427,7 @@ export const useGameStore = create<GameState>((set, get) => ({
       profile: DEFAULT_PROFILE,
       matchHistory: [],
       activeLeague: null,
+      activeCup: null,
       selectedReplayFixture: null,
       transferTargets: [],
       unlockedTrophies: [],
@@ -657,5 +778,274 @@ export const useGameStore = create<GameState>((set, get) => ({
 
   setSelectedReplayFixture: (fixture: LeagueFixture | null) => {
     set({ selectedReplayFixture: fixture });
+  },
+
+  upgradeFacility: async (facility) => {
+    const { club } = get();
+    if (!club) return { success: false, message: 'Kelab tidak dijumpai.' };
+
+    const facilities = club.facilities ?? {
+      stadiumLevel: 1,
+      youthAcademyLevel: 1,
+      medicalLevel: 1,
+    };
+
+    const currentLevel =
+      facility === 'stadium'
+        ? facilities.stadiumLevel
+        : facility === 'youthAcademy'
+        ? facilities.youthAcademyLevel
+        : facilities.medicalLevel;
+
+    const cost = upgradeCost(facility, currentLevel);
+    if (cost === null) {
+      return { success: false, message: 'Fasiliti ini telah mencapai tahap maksimum!' };
+    }
+
+    if (club.budget < cost) {
+      return {
+        success: false,
+        message: `Bajet tidak mencukupi untuk naik taraf (Perlu RM${cost.toLocaleString()}).`,
+      };
+    }
+
+    const newLevel = currentLevel + 1;
+    const updatedFacilities = {
+      ...facilities,
+      ...(facility === 'stadium' ? { stadiumLevel: newLevel } : {}),
+      ...(facility === 'youthAcademy' ? { youthAcademyLevel: newLevel } : {}),
+      ...(facility === 'medical' ? { medicalLevel: newLevel } : {}),
+    };
+
+    const updatedClub: Club = {
+      ...club,
+      budget: club.budget - cost,
+      facilities: updatedFacilities,
+    };
+
+    await saveClub(updatedClub);
+    set({ club: updatedClub });
+
+    return {
+      success: true,
+      message: `Naik taraf berjaya! Tahap baru: ${newLevel}`,
+      newLevel,
+    };
+  },
+
+  promoteYouthProdigy: async () => {
+    const { club } = get();
+    if (!club) return { success: false, message: 'Kelab tidak dijumpai.' };
+
+    const signingFee = 3000;
+    if (club.budget < signingFee) {
+      return {
+        success: false,
+        message: `Bajet tidak mencukupi untuk menandatangani pemain akademi (Kos: RM${signingFee.toLocaleString()}).`,
+      };
+    }
+
+    const academyLevel = club.facilities?.youthAcademyLevel ?? 1;
+    const prodigy = generateYouthProdigy(academyLevel);
+
+    const updatedClub: Club = {
+      ...club,
+      budget: club.budget - signingFee,
+      squad: [...club.squad, prodigy],
+    };
+
+    await saveClub(updatedClub);
+    set({ club: updatedClub });
+
+    return {
+      success: true,
+      message: `Permata akademi ${prodigy.name} (${prodigy.position}, OVR ${prodigy.overallRating}) telah diserap ke dalam skuad!`,
+      player: prodigy,
+    };
+  },
+
+  signSponsorContract: async (sponsorId: string) => {
+    const { club } = get();
+    if (!club) return { success: false, message: 'Kelab tidak dijumpai.' };
+
+    const sponsor = getSponsorById(sponsorId);
+    if (!sponsor) return { success: false, message: 'Tajaan tidak sah.' };
+
+    const updatedClub: Club = {
+      ...club,
+      budget: club.budget + sponsor.upfrontBonus,
+      activeSponsorId: sponsor.id,
+    };
+
+    await saveClub(updatedClub);
+    set({ club: updatedClub });
+
+    return {
+      success: true,
+      message: `Kontrak penajaan bersama ${sponsor.name} berjaya dimeterai! Menerima bonus pendahuluan RM${sponsor.upfrontBonus.toLocaleString()}.`,
+      sponsor: { ...sponsor, active: true },
+    };
+  },
+
+  createCupTournament: async () => {
+    const { club } = get();
+    if (!club) throw new Error('No active club to create cup');
+
+    const seed = Date.now();
+    const cup = createKnockoutCup(club, seed);
+    await saveActiveCup(cup);
+    set({ activeCup: cup });
+    return cup;
+  },
+
+  simulateCupRound: async () => {
+    const { activeCup, club, matchHistory, activeLeague } = get();
+    if (!activeCup || activeCup.status === 'completed') {
+      return { success: false, message: 'Tiada pusingan piala untuk disimulasi.' };
+    }
+
+    const roundMatches = activeCup.matches.filter((m) => m.round === activeCup.currentRound);
+    const updatedRoundMatches = roundMatches.map((match) => {
+      if (match.isCompleted) return match;
+      return simulateCupMatch(match, match.seed);
+    });
+
+    const otherMatches = activeCup.matches.filter((m) => m.round !== activeCup.currentRound);
+    const cupWithSimulatedMatches: KnockoutCup = {
+      ...activeCup,
+      matches: [...otherMatches, ...updatedRoundMatches],
+    };
+
+    const advancedCup = advanceCupTournament(cupWithSimulatedMatches, Date.now());
+    await saveActiveCup(advancedCup);
+
+    const updatedTrophies = club
+      ? evaluateUnlockedTrophies(club, activeLeague, matchHistory, advancedCup)
+      : [];
+
+    set({
+      activeCup: advancedCup,
+      unlockedTrophies: updatedTrophies,
+    });
+
+    return {
+      success: true,
+      message: `Pusingan ${activeCup.currentRound} berjaya disimulasi!`,
+    };
+  },
+
+  claimCupPrize: async () => {
+    const { activeCup, club, activeLeague, matchHistory } = get();
+    if (!club) {
+      return { prize: 0, success: false, message: 'Kelab tidak dijumpai.' };
+    }
+    if (!activeCup || activeCup.status !== 'completed' || activeCup.winnerClubId !== club.id) {
+      return { prize: 0, success: false, message: 'Hanya juara Piala MainBola yang layak menuntut hadiah.' };
+    }
+    if (activeCup.prizeClaimed) {
+      return { prize: 0, success: false, message: 'Hadiah kejuaraan piala telah dituntut sebelum ini.' };
+    }
+
+    const prize = CUP_CHAMPION_PRIZE;
+    const updatedClub: Club = {
+      ...club,
+      budget: club.budget + prize,
+    };
+
+    const updatedCup: KnockoutCup = {
+      ...activeCup,
+      prizeClaimed: true,
+    };
+
+    await Promise.all([saveClub(updatedClub), saveActiveCup(updatedCup)]);
+
+    const updatedTrophies = evaluateUnlockedTrophies(
+      updatedClub,
+      activeLeague,
+      matchHistory,
+      updatedCup
+    );
+
+    set({
+      club: updatedClub,
+      activeCup: updatedCup,
+      unlockedTrophies: updatedTrophies,
+    });
+
+    return {
+      prize,
+      success: true,
+      message: `Tahniah! Hadiah kejuaraan Piala MainBola RM${prize.toLocaleString()} telah dikreditkan ke bajet kelab!`,
+    };
+  },
+
+  exportGameData: () => {
+    const { club, profile, matchHistory, activeLeague, activeCup, unlockedTrophies } = get();
+    return exportSaveData({
+      version: '0.5.0',
+      exportedAt: Date.now(),
+      club,
+      profile,
+      matchHistory,
+      activeLeague,
+      activeCup,
+      unlockedTrophies,
+    });
+  },
+
+  importGameData: async (jsonString: string) => {
+    try {
+      const payload = importSaveData(jsonString);
+
+      await resetAllData();
+
+      if (payload.club) {
+        await saveClub(payload.club);
+      }
+      if (payload.profile) {
+        await saveProfile(payload.profile);
+      }
+      if (Array.isArray(payload.matchHistory)) {
+        for (const match of payload.matchHistory) {
+          await saveMatchResult(match);
+        }
+      }
+      if (payload.activeLeague) {
+        await saveActiveLeague(payload.activeLeague);
+      }
+      if (payload.activeCup) {
+        await saveActiveCup(payload.activeCup);
+      }
+
+      const trophies = payload.club
+        ? evaluateUnlockedTrophies(
+            payload.club,
+            payload.activeLeague,
+            payload.matchHistory || [],
+            payload.activeCup
+          )
+        : [];
+
+      set({
+        club: payload.club,
+        profile: payload.profile ?? DEFAULT_PROFILE,
+        matchHistory: payload.matchHistory || [],
+        activeLeague: payload.activeLeague ?? null,
+        activeCup: payload.activeCup ?? null,
+        unlockedTrophies: trophies,
+        isLoading: false,
+      });
+
+      return {
+        success: true,
+        message: 'Data simpanan berjaya dimuat naik sepenuhnya!',
+      };
+    } catch (err) {
+      console.error('[useGameStore] importGameData error:', err);
+      return {
+        success: false,
+        message: err instanceof Error ? err.message : 'Gagal memuat naik data simpanan.',
+      };
+    }
   },
 }));

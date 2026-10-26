@@ -7,7 +7,7 @@ import {
   evaluateUnlockedTrophies,
   calculateTrophyProgress,
 } from '../trophies';
-import { Club, MatchResult, Player } from '../../types';
+import { Club, KnockoutCup, MatchResult, Player } from '../../types';
 import { League, LeagueStanding, TopScorer } from '../../types/league';
 
 // Helper to generate a dummy club
@@ -431,6 +431,30 @@ describe('Trophy Cabinet & Season Awards System (trophies.ts)', () => {
       expect(progress.target).toBe(100);
       expect(progress.percentage).toBe(45);
       expect(progress.isCompleted).toBe(false);
+    });
+
+    it('unlocks CUP_CHAMPION trophy when club wins the Knockout Cup', () => {
+      const club = createTestClub();
+      const cup: KnockoutCup = {
+        id: 'cup_test_champ',
+        name: 'Piala MainBola',
+        season: 1,
+        status: 'completed',
+        currentRound: 'Final',
+        currentRoundIndex: 2,
+        teams: [],
+        matches: [],
+        winnerClubId: club.id,
+        winnerClubName: club.name,
+        createdAt: 1700000000000,
+      };
+
+      const unlocked = evaluateUnlockedTrophies(club, null, [], cup);
+      expect(hasTrophy(unlocked, 'CUP_CHAMPION')).toBe(true);
+
+      const progress = calculateTrophyProgress('CUP_CHAMPION', club, null, [], cup);
+      expect(progress.isCompleted).toBe(true);
+      expect(progress.percentage).toBe(100);
     });
   });
 });

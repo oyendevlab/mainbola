@@ -425,11 +425,31 @@ export const SquadTab: React.FC = () => {
                   </span>
 
                   <div>
-                    <div className="text-xs font-bold text-white flex items-center gap-2">
+                    <div className="text-xs font-bold text-white flex items-center gap-1.5 flex-wrap">
                       <span>{player.name}</span>
                       {isStarter && (
                         <span className="text-[9px] uppercase font-bold text-emerald-400 bg-emerald-500/10 px-1.5 py-0.2 rounded border border-emerald-500/20">
                           Starting XI
+                        </span>
+                      )}
+                      {player.isSuspended && (
+                        <span className="text-[9px] uppercase font-bold text-rose-400 bg-rose-500/20 px-1.5 py-0.2 rounded border border-rose-500/30">
+                          Digantung
+                        </span>
+                      )}
+                      {player.isYouthProduct && (
+                        <span className="text-[9px] uppercase font-bold text-amber-300 bg-amber-500/20 px-1.5 py-0.2 rounded border border-amber-500/30">
+                          ★ Akademi
+                        </span>
+                      )}
+                      {(player.yellowCards ?? 0) > 0 && (
+                        <span className="text-[9px] font-mono font-bold text-amber-400 bg-amber-500/15 px-1 rounded">
+                          🟨 {player.yellowCards}
+                        </span>
+                      )}
+                      {(player.redCards ?? 0) > 0 && (
+                        <span className="text-[9px] font-mono font-bold text-rose-400 bg-rose-500/15 px-1 rounded">
+                          🟥 {player.redCards}
                         </span>
                       )}
                     </div>

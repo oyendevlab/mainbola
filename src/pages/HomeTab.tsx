@@ -1,6 +1,7 @@
 import React from 'react';
 import { useGameStore } from '../store/useGameStore';
 import { BadgeIcon } from '../components/common/BadgeIcon';
+import { ClubFacilitiesSection } from '../components/home/ClubFacilitiesSection';
 import { Play, Users, Trophy, ChevronRight, Activity, Calendar } from 'lucide-react';
 
 export const HomeTab: React.FC = () => {
@@ -82,6 +83,9 @@ export const HomeTab: React.FC = () => {
         </div>
         <ChevronRight className="w-6 h-6 stroke-[2.5] group-hover:translate-x-1 transition-transform" />
       </button>
+
+      {/* Club Infrastructure & Facilities Management */}
+      <ClubFacilitiesSection />
 
       {/* Squad Overview & Key Players */}
       <div className="rounded-2xl bg-navy-900 border border-slate-800 p-4 shadow-xl space-y-3">

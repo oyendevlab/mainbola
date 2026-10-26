@@ -1,13 +1,45 @@
-import React, { useState } from 'react';
+import React, { useState, useRef } from 'react';
 import { useGameStore } from '../store/useGameStore';
 import { BadgeIcon } from '../components/common/BadgeIcon';
-import { User, Shield, Volume2, VolumeX, RotateCcw, AlertTriangle, CheckCircle2, Award, Zap, Trophy, Lock } from 'lucide-react';
+import {
+  User,
+  Shield,
+  Volume2,
+  VolumeX,
+  RotateCcw,
+  AlertTriangle,
+  CheckCircle2,
+  Award,
+  Zap,
+  Trophy,
+  Lock,
+  Download,
+  Upload,
+  FileJson,
+  X,
+} from 'lucide-react';
 import { getAllTrophies } from '../engine/trophies';
 
 export const ProfileTab: React.FC = () => {
-  const { club, profile, updateProfile, resetGame, matchHistory, unlockedTrophies } = useGameStore();
+  const {
+    club,
+    profile,
+    updateProfile,
+    resetGame,
+    matchHistory,
+    unlockedTrophies,
+    exportGameData,
+    importGameData,
+  } = useGameStore();
+
   const [showResetConfirm, setShowResetConfirm] = useState(false);
   const [resetSuccess, setResetSuccess] = useState(false);
+  const [exportSuccess, setExportSuccess] = useState(false);
+  const [importSuccess, setImportSuccess] = useState(false);
+  const [importError, setImportError] = useState<string | null>(null);
+  const [showImportModal, setShowImportModal] = useState(false);
+  const [pastedJson, setPastedJson] = useState('');
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
   const allTrophies = getAllTrophies();
   const unlockedIds = new Set((unlockedTrophies || []).map((t) => t.id));
@@ -25,6 +57,71 @@ export const ProfileTab: React.FC = () => {
     setShowResetConfirm(false);
     setResetSuccess(true);
     setTimeout(() => setResetSuccess(false), 3000);
+  };
+
+  const handleExport = () => {
+    try {
+      const jsonStr = exportGameData();
+
+      // Trigger browser file download
+      const blob = new Blob([jsonStr], { type: 'application/json' });
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement('a');
+      const clubSlug = club?.name ? club.name.replace(/\s+/g, '_').toLowerCase() : 'club';
+      link.href = url;
+      link.download = `mainbola_save_${clubSlug}_${Date.now()}.json`;
+      link.click();
+      URL.revokeObjectURL(url);
+
+      // Clipboard fallback
+      if (navigator.clipboard) {
+        navigator.clipboard.writeText(jsonStr).catch(() => {});
+      }
+
+      setExportSuccess(true);
+      setTimeout(() => setExportSuccess(false), 4000);
+    } catch (err) {
+      console.error('Export failed:', err);
+    }
+  };
+
+  const handleFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    const reader = new FileReader();
+    reader.onload = async (event) => {
+      const content = event.target?.result as string;
+      if (content) {
+        const res = await importGameData(content);
+        if (res.success) {
+          setImportSuccess(true);
+          setShowImportModal(false);
+          setTimeout(() => setImportSuccess(false), 4000);
+        } else {
+          setImportError(res.message);
+          setTimeout(() => setImportError(null), 5000);
+        }
+      }
+    };
+    reader.readAsText(file);
+    if (fileInputRef.current) {
+      fileInputRef.current.value = '';
+    }
+  };
+
+  const handlePastedImport = async () => {
+    if (!pastedJson.trim()) return;
+    const res = await importGameData(pastedJson);
+    if (res.success) {
+      setImportSuccess(true);
+      setShowImportModal(false);
+      setPastedJson('');
+      setTimeout(() => setImportSuccess(false), 4000);
+    } else {
+      setImportError(res.message);
+      setTimeout(() => setImportError(null), 5000);
+    }
   };
 
   const totalMatches = club ? club.stats.played : 0;
@@ -240,39 +337,169 @@ export const ProfileTab: React.FC = () => {
         </div>
       </div>
 
-      {/* Danger Zone: Reset Game Data */}
-      <div className="rounded-2xl bg-rose-950/20 border border-rose-900/40 p-5 shadow-xl">
-        <h3 className="text-xs font-bold text-rose-400 uppercase tracking-wider mb-2 flex items-center gap-1.5">
-          <AlertTriangle className="w-4 h-4" />
-          Data Management
-        </h3>
-        <p className="text-xs text-slate-400 leading-relaxed mb-4">
-          All your club details, 15 players, tactics, and match archives are stored locally in your browser's IndexedDB. You can erase all data to start fresh.
-        </p>
+      {/* Data Management Section */}
+      <div className="rounded-2xl bg-navy-900 border border-slate-800 p-5 shadow-xl space-y-4">
+        <div>
+          <h3 className="text-xs font-bold text-slate-300 uppercase tracking-wider mb-1 flex items-center gap-1.5">
+            <FileJson className="w-4 h-4 text-emerald-400" />
+            Pengurusan &amp; Sandaran Data (JSON)
+          </h3>
+          <p className="text-xs text-slate-400 leading-relaxed">
+            Eksport kemajuan kelab, fasiliti, dan rekod perlawanan anda ke fail JSON, atau muat naik simpanan dari peranti lain.
+          </p>
+        </div>
 
-        {resetSuccess && (
-          <div className="mb-4 p-3 rounded-xl bg-emerald-500/10 border border-emerald-500/30 text-emerald-400 text-xs flex items-center gap-2">
+        {/* Feedback states */}
+        {exportSuccess && (
+          <div className="p-3 rounded-xl bg-emerald-500/10 border border-emerald-500/30 text-emerald-400 text-xs flex items-center gap-2">
             <CheckCircle2 className="w-4 h-4 shrink-0" />
-            <span>Local data has been completely reset. Creating a new club is now available.</span>
+            <span>Data simpanan berjaya dimuat turun dan disalin ke papan keratan (clipboard)!</span>
           </div>
         )}
 
-        <button
-          onClick={() => setShowResetConfirm(true)}
-          className="px-4 py-2.5 rounded-xl font-semibold text-xs bg-rose-600/20 hover:bg-rose-600/30 text-rose-300 border border-rose-500/30 transition flex items-center gap-2 cursor-pointer"
-        >
-          <RotateCcw className="w-4 h-4" />
-          <span>Reset All Club Data</span>
-        </button>
+        {importSuccess && (
+          <div className="p-3 rounded-xl bg-emerald-500/10 border border-emerald-500/30 text-emerald-400 text-xs flex items-center gap-2">
+            <CheckCircle2 className="w-4 h-4 shrink-0" />
+            <span>Data simpanan berjaya dimuat naik sepenuhnya!</span>
+          </div>
+        )}
+
+        {importError && (
+          <div className="p-3 rounded-xl bg-rose-500/10 border border-rose-500/30 text-rose-400 text-xs flex items-center gap-2">
+            <AlertTriangle className="w-4 h-4 shrink-0" />
+            <span>{importError}</span>
+          </div>
+        )}
+
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
+          <button
+            onClick={handleExport}
+            className="py-2.5 px-4 rounded-xl font-bold text-xs bg-emerald-500 hover:bg-emerald-400 text-navy-950 transition flex items-center justify-center gap-2 cursor-pointer shadow-md shadow-emerald-500/10"
+          >
+            <Download className="w-4 h-4" />
+            <span>Eksport Simpanan (JSON)</span>
+          </button>
+
+          <button
+            onClick={() => setShowImportModal(true)}
+            className="py-2.5 px-4 rounded-xl font-bold text-xs bg-navy-950 hover:bg-slate-800 text-slate-200 border border-slate-700 transition flex items-center justify-center gap-2 cursor-pointer"
+          >
+            <Upload className="w-4 h-4 text-emerald-400" />
+            <span>Import Simpanan (JSON)</span>
+          </button>
+        </div>
+
+        {/* Danger Zone: Reset Game Data */}
+        <div className="pt-3 border-t border-slate-800/80">
+          <div className="flex items-center justify-between">
+            <div>
+              <div className="text-xs font-bold text-rose-400 flex items-center gap-1">
+                <AlertTriangle className="w-3.5 h-3.5" />
+                <span>Zon Bahaya: Padam Data</span>
+              </div>
+              <div className="text-[11px] text-slate-500 mt-0.5">
+                Padam seluruh kelab, pemain, dan rekod perlawanan tempatan.
+              </div>
+            </div>
+
+            <button
+              onClick={() => setShowResetConfirm(true)}
+              className="px-3 py-1.5 rounded-lg font-semibold text-xs bg-rose-600/20 hover:bg-rose-600/30 text-rose-300 border border-rose-500/30 transition flex items-center gap-1.5 cursor-pointer shrink-0"
+            >
+              <RotateCcw className="w-3.5 h-3.5" />
+              <span>Padam Semua</span>
+            </button>
+          </div>
+
+          {resetSuccess && (
+            <div className="mt-3 p-2.5 rounded-xl bg-emerald-500/10 border border-emerald-500/30 text-emerald-400 text-xs flex items-center gap-2">
+              <CheckCircle2 className="w-4 h-4 shrink-0" />
+              <span>Data tempatan telah dipadamkan sepenuhnya.</span>
+            </div>
+          )}
+        </div>
       </div>
 
       {/* App Branding & Version Footer */}
       <div className="flex flex-col items-center justify-center pt-2 pb-6 text-center border-t border-slate-800/60">
         <img src="/logo.svg" alt="MainBola" className="h-8 w-auto opacity-80 mb-2" />
         <div className="text-[11px] text-slate-500 font-mono">
-          MainBola v0.2.1 • PWA Football Manager Lite
+          MainBola v0.5.0 • PWA Football Manager Lite
         </div>
       </div>
+
+      {/* Import Modal */}
+      {showImportModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-md p-4 animate-in fade-in duration-150">
+          <div className="bg-navy-900 border border-slate-800 rounded-2xl w-full max-w-md p-5 shadow-2xl space-y-4">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-2">
+                <Upload className="w-5 h-5 text-emerald-400" />
+                <h3 className="text-sm font-bold text-white">Import Simpanan (JSON)</h3>
+              </div>
+              <button
+                onClick={() => setShowImportModal(false)}
+                className="p-1 rounded-lg text-slate-400 hover:text-white hover:bg-slate-800"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            <p className="text-xs text-slate-400 leading-relaxed">
+              Pilih fail sandaran <code>.json</code> daripada peranti anda atau tampal teks JSON di bawah.
+            </p>
+
+            {/* File input */}
+            <div>
+              <input
+                ref={fileInputRef}
+                type="file"
+                accept=".json,application/json"
+                onChange={handleFileUpload}
+                className="hidden"
+                id="save-file-input"
+              />
+              <label
+                htmlFor="save-file-input"
+                className="w-full py-3 px-4 rounded-xl border border-dashed border-slate-700 hover:border-emerald-500/60 bg-navy-950 hover:bg-navy-950/80 transition flex items-center justify-center gap-2 text-xs font-bold text-slate-300 hover:text-white cursor-pointer"
+              >
+                <Upload className="w-4 h-4 text-emerald-400" />
+                <span>Pilih Fail .JSON dari Peranti</span>
+              </label>
+            </div>
+
+            {/* Paste JSON */}
+            <div className="space-y-1.5">
+              <label className="text-[11px] font-bold text-slate-400 uppercase">
+                Atau Tampal Kod Simpanan JSON:
+              </label>
+              <textarea
+                value={pastedJson}
+                onChange={(e) => setPastedJson(e.target.value)}
+                placeholder='Tampal teks JSON {"version": "0.5.0", ...}'
+                rows={5}
+                className="w-full p-3 rounded-xl bg-navy-950 border border-slate-800 text-slate-200 font-mono text-xs focus:outline-none focus:border-emerald-500/60"
+              />
+            </div>
+
+            <div className="flex gap-2 pt-1">
+              <button
+                onClick={() => setShowImportModal(false)}
+                className="flex-1 py-2.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-300 text-xs font-semibold transition cursor-pointer"
+              >
+                Batal
+              </button>
+              <button
+                disabled={!pastedJson.trim()}
+                onClick={handlePastedImport}
+                className="flex-1 py-2.5 rounded-xl bg-emerald-500 hover:bg-emerald-400 disabled:bg-slate-800 disabled:text-slate-500 text-navy-950 text-xs font-bold transition cursor-pointer disabled:cursor-not-allowed"
+              >
+                Muat Naik Data
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Confirmation Modal */}
       {showResetConfirm && (
