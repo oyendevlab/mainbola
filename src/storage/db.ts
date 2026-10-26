@@ -1,0 +1,292 @@
+import { openDB, DBSchema, IDBPDatabase } from 'idb';
+import { Club, ManagerProfile, MatchResult } from '../types';
+
+export const DB_NAME = 'goal_rush_db';
+export const DB_VERSION = 1;
+export const ACTIVE_CLUB_KEY = 'active_club';
+export const PROFILE_KEY = 'profile';
+
+export interface GoalRushDBSchema extends DBSchema {
+  clubs: {
+    key: string;
+    value: Club;
+  };
+  manager: {
+    key: string;
+    value: ManagerProfile;
+  };
+  matches: {
+    key: string;
+    value: MatchResult;
+    indexes: {
+      timestamp: number;
+    };
+  };
+  settings: {
+    key: string;
+    value: unknown;
+  };
+}
+
+let dbInstance: IDBPDatabase<GoalRushDBSchema> | null = null;
+let dbPromise: Promise<IDBPDatabase<GoalRushDBSchema>> | null = null;
+
+/**
+ * Obtain a connection to the IndexedDB database.
+ * Uses a singleton promise to avoid race conditions during concurrent initialization.
+ */
+export async function getDb(): Promise<IDBPDatabase<GoalRushDBSchema>> {
+  if (dbInstance) {
+    return dbInstance;
+  }
+
+  if (!dbPromise) {
+    dbPromise = openDB<GoalRushDBSchema>(DB_NAME, DB_VERSION, {
+      upgrade(db, _oldVersion, _newVersion, _transaction) {
+        // Migration safeguards: safely check if stores exist before creating
+        if (!db.objectStoreNames.contains('clubs')) {
+          db.createObjectStore('clubs');
+        }
+
+        if (!db.objectStoreNames.contains('manager')) {
+          db.createObjectStore('manager');
+        }
+
+        if (!db.objectStoreNames.contains('matches')) {
+          const matchStore = db.createObjectStore('matches', { keyPath: 'id' });
+          matchStore.createIndex('timestamp', 'timestamp');
+        }
+
+        if (!db.objectStoreNames.contains('settings')) {
+          db.createObjectStore('settings');
+        }
+      },
+      blocked() {
+        console.warn('[IndexedDB] Database open blocked by another open tab/connection.');
+      },
+      blocking() {
+        console.warn('[IndexedDB] Database connection is blocking a newer version.');
+        if (dbInstance) {
+          dbInstance.close();
+          dbInstance = null;
+          dbPromise = null;
+        }
+      },
+      terminated() {
+        console.error('[IndexedDB] Database connection unexpectedly terminated.');
+        dbInstance = null;
+        dbPromise = null;
+      },
+    })
+      .then((db) => {
+        dbInstance = db;
+        return db;
+      })
+      .catch((err) => {
+        dbPromise = null;
+        dbInstance = null;
+        console.error('[IndexedDB] Failed to open database:', err);
+        throw err;
+      });
+  }
+
+  return dbPromise;
+}
+
+/**
+ * Close active database connection and reset cache.
+ */
+export function closeDb(): void {
+  if (dbInstance) {
+    try {
+      dbInstance.close();
+    } catch (e) {
+      console.warn('[IndexedDB] Error closing database:', e);
+    }
+    dbInstance = null;
+  }
+  dbPromise = null;
+}
+
+// ============================================================================
+// Club Persistence
+// ============================================================================
+
+/**
+ * Retrieve the active user club from IndexedDB.
+ */
+export async function getClub(): Promise<Club | null> {
+  try {
+    const db = await getDb();
+    const club = await db.get('clubs', ACTIVE_CLUB_KEY);
+    if (club) return club;
+
+    // Fallback: if 'active_club' key is not found, check if any club exists
+    const allClubs = await db.getAll('clubs');
+    return allClubs.length > 0 ? allClubs[0] : null;
+  } catch (err) {
+    console.error('[IndexedDB] getClub error:', err);
+    return null;
+  }
+}
+
+/**
+ * Save user club into IndexedDB under the active club key.
+ */
+export async function saveClub(club: Club): Promise<void> {
+  try {
+    const db = await getDb();
+    await db.put('clubs', club, ACTIVE_CLUB_KEY);
+  } catch (err) {
+    console.error('[IndexedDB] saveClub error:', err);
+    throw new Error(`Failed to save club: ${err instanceof Error ? err.message : String(err)}`);
+  }
+}
+
+/**
+ * Delete the active club from IndexedDB.
+ */
+export async function deleteClub(): Promise<void> {
+  try {
+    const db = await getDb();
+    await db.delete('clubs', ACTIVE_CLUB_KEY);
+  } catch (err) {
+    console.error('[IndexedDB] deleteClub error:', err);
+    throw new Error(`Failed to delete club: ${err instanceof Error ? err.message : String(err)}`);
+  }
+}
+
+// ============================================================================
+// Manager Profile Persistence
+// ============================================================================
+
+/**
+ * Retrieve manager profile from IndexedDB.
+ */
+export async function getProfile(): Promise<ManagerProfile | null> {
+  try {
+    const db = await getDb();
+    const profile = await db.get('manager', PROFILE_KEY);
+    return profile ?? null;
+  } catch (err) {
+    console.error('[IndexedDB] getProfile error:', err);
+    return null;
+  }
+}
+
+/**
+ * Save manager profile to IndexedDB.
+ */
+export async function saveProfile(profile: ManagerProfile): Promise<void> {
+  try {
+    const db = await getDb();
+    await db.put('manager', profile, PROFILE_KEY);
+  } catch (err) {
+    console.error('[IndexedDB] saveProfile error:', err);
+    throw new Error(`Failed to save profile: ${err instanceof Error ? err.message : String(err)}`);
+  }
+}
+
+// ============================================================================
+// Match History Persistence
+// ============================================================================
+
+/**
+ * Retrieve all matches sorted by newest first (descending timestamp).
+ */
+export async function getMatchHistory(): Promise<MatchResult[]> {
+  try {
+    const db = await getDb();
+    const tx = db.transaction('matches', 'readonly');
+    const store = tx.store;
+    const index = store.index('timestamp');
+    const matches = await index.getAll();
+    await tx.done;
+
+    // Return in reverse chronological order (newest first)
+    return matches.sort((a, b) => b.timestamp - a.timestamp);
+  } catch (err) {
+    console.error('[IndexedDB] getMatchHistory error:', err);
+    return [];
+  }
+}
+
+/**
+ * Save a match result into IndexedDB.
+ */
+export async function saveMatchResult(result: MatchResult): Promise<void> {
+  try {
+    const db = await getDb();
+    await db.put('matches', result);
+  } catch (err) {
+    console.error('[IndexedDB] saveMatchResult error:', err);
+    throw new Error(`Failed to save match result: ${err instanceof Error ? err.message : String(err)}`);
+  }
+}
+
+// ============================================================================
+// Settings Persistence
+// ============================================================================
+
+/**
+ * Retrieve a setting by key.
+ */
+export async function getSetting<T>(key: string, defaultValue?: T): Promise<T | null> {
+  try {
+    const db = await getDb();
+    const val = await db.get('settings', key);
+    return (val as T) ?? defaultValue ?? null;
+  } catch (err) {
+    console.error(`[IndexedDB] getSetting(${key}) error:`, err);
+    return defaultValue ?? null;
+  }
+}
+
+/**
+ * Save a setting by key.
+ */
+export async function saveSetting<T>(key: string, value: T): Promise<void> {
+  try {
+    const db = await getDb();
+    await db.put('settings', value, key);
+  } catch (err) {
+    console.error(`[IndexedDB] saveSetting(${key}) error:`, err);
+    throw new Error(`Failed to save setting ${key}: ${err instanceof Error ? err.message : String(err)}`);
+  }
+}
+
+/**
+ * Delete a setting by key.
+ */
+export async function deleteSetting(key: string): Promise<void> {
+  try {
+    const db = await getDb();
+    await db.delete('settings', key);
+  } catch (err) {
+    console.error(`[IndexedDB] deleteSetting(${key}) error:`, err);
+  }
+}
+
+// ============================================================================
+// Reset and Maintenance
+// ============================================================================
+
+/**
+ * Safely clears all object stores (clubs, manager, matches, settings) in a single transaction.
+ */
+export async function resetAllData(): Promise<void> {
+  try {
+    const db = await getDb();
+    const tx = db.transaction(['clubs', 'manager', 'matches', 'settings'], 'readwrite');
+    await Promise.all([
+      tx.objectStore('clubs').clear(),
+      tx.objectStore('manager').clear(),
+      tx.objectStore('matches').clear(),
+      tx.objectStore('settings').clear(),
+      tx.done,
+    ]);
+  } catch (err) {
+    console.error('[IndexedDB] resetAllData error:', err);
+    throw new Error(`Failed to reset data: ${err instanceof Error ? err.message : String(err)}`);
+  }
+}
