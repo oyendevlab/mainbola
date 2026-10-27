@@ -9,6 +9,11 @@ import { PhaserGame, PhaserGameRef } from '../renderer/PhaserGame';
 import { BadgeIcon } from '../components/common/BadgeIcon';
 import { PressConferenceModal } from '../components/match/PressConferenceModal';
 import { PvPChallengeModal } from '../components/match/PvPChallengeModal';
+import { ScoutingReportModal } from '../components/match/ScoutingReportModal';
+import { ScenarioChallengeModal } from '../components/match/ScenarioChallengeModal';
+import { speakCommentary, stopCommentary } from '../engine/commentary';
+import { executeScenarioChallenge } from '../engine/scenarios';
+import { ScenarioDefinition } from '../types/scenarios';
 import confetti from 'canvas-confetti';
 import {
   Play,
@@ -22,7 +27,10 @@ import {
   VolumeX,
   ArrowLeftRight,
   Mic,
+  MicOff,
   Swords,
+  Search,
+  Target,
 } from 'lucide-react';
 
 export const MatchTab: React.FC = () => {
@@ -31,6 +39,8 @@ export const MatchTab: React.FC = () => {
     profile,
     recordMatchResult,
     recordPvPResult,
+    completeScenario,
+    toggleCommentaryVoice,
     setActiveTab,
     updateTactics,
     setStartingXI,
@@ -52,9 +62,12 @@ export const MatchTab: React.FC = () => {
   const [selectedSubStarterId, setSelectedSubStarterId] = useState<string | null>(null);
   const [subsCount, setSubsCount] = useState(0);
 
-  // Version 0.6.0 Modals & States
+  // Version 0.6.0 & 0.7.0 Modals & States
   const [showPressModal, setShowPressModal] = useState(false);
   const [showPvPModal, setShowPvPModal] = useState(false);
+  const [showScoutingModal, setShowScoutingModal] = useState(false);
+  const [showScenarioModal, setShowScenarioModal] = useState(false);
+  const [activeScenario, setActiveScenario] = useState<ScenarioDefinition | null>(null);
   const [currentMatchSeed] = useState(() => Date.now());
   const [pvpOpponentRating, setPvpOpponentRating] = useState<number | null>(null);
 
@@ -119,12 +132,31 @@ export const MatchTab: React.FC = () => {
   };
 
   const handleStartPvPMatch = (result: MatchResult, opponentRating: number) => {
+    setActiveScenario(null);
     setPvpOpponentRating(opponentRating);
     setMatchResult(result);
     setHomeScore(0);
     setAwayScore(0);
     setCurrentMinute(0);
     setCommentary(`PvP Duel Kickoff! ${result.homeClub.name} vs ${result.awayClub.name}`);
+    setIsPlayingReplay(true);
+    setIsPaused(false);
+    setShowStatsModal(false);
+    setShowHalftimeModal(false);
+    setSubsCount(0);
+    setSelectedSubStarterId(null);
+    setHalftimeTactics(club.tactics);
+  };
+
+  const handleStartScenario = (scenario: ScenarioDefinition) => {
+    const exec = executeScenarioChallenge(club, scenario, Date.now());
+    setActiveScenario(scenario);
+    setPvpOpponentRating(null);
+    setMatchResult(exec.matchResult);
+    setHomeScore(scenario.initialHomeScore);
+    setAwayScore(scenario.initialAwayScore);
+    setCurrentMinute(scenario.startingMinute);
+    setCommentary(`Misi Senario: ${scenario.title} bermula! Objektif: ${scenario.targetDescription}`);
     setIsPlayingReplay(true);
     setIsPaused(false);
     setShowStatsModal(false);
@@ -177,6 +209,7 @@ export const MatchTab: React.FC = () => {
   };
 
   const handleRestartReplay = () => {
+    stopCommentary();
     phaserRef.current?.restart();
     setHomeScore(0);
     setAwayScore(0);
@@ -192,6 +225,11 @@ export const MatchTab: React.FC = () => {
 
   const handleEvent = (event: MatchEvent) => {
     setCommentary(`${event.minute}' ${event.description}`);
+    // Version 0.7.0 Web Speech API Live Commentary
+    speakCommentary(event, {
+      enabled: profile.commentaryVoiceEnabled ?? true,
+      language: profile.commentaryLanguage ?? 'ms',
+    });
   };
 
   const handleScoreUpdate = (h: number, a: number) => {
@@ -201,9 +239,24 @@ export const MatchTab: React.FC = () => {
 
   const handleMatchEnd = () => {
     setShowStatsModal(true);
+    stopCommentary();
 
     if (matchResult) {
-      if (pvpOpponentRating !== null) {
+      if (activeScenario) {
+        let success = false;
+        if (activeScenario.targetGoal === 'draw_or_win') {
+          success = matchResult.homeScore >= matchResult.awayScore;
+        } else if (activeScenario.targetGoal === 'clean_sheet_win') {
+          success = matchResult.awayScore === activeScenario.initialAwayScore && matchResult.homeScore > matchResult.awayScore;
+        } else if (activeScenario.targetGoal === 'win') {
+          success = matchResult.homeScore > matchResult.awayScore;
+        }
+
+        if (success) {
+          completeScenario(activeScenario.id, activeScenario.creditReward);
+        }
+        setActiveScenario(null);
+      } else if (pvpOpponentRating !== null) {
         recordPvPResult(matchResult, pvpOpponentRating);
       } else {
         recordMatchResult(matchResult);
@@ -355,6 +408,53 @@ export const MatchTab: React.FC = () => {
             >
               Cabaran PvP
             </button>
+          </div>
+
+          {/* Version 0.7.0 Scouting Intel & Scenario Mode Quick Actions */}
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+            {/* Scouting Report Action */}
+            <div className="p-3.5 rounded-2xl bg-navy-900 border border-slate-800 flex items-center justify-between shadow-xl">
+              <div className="flex items-center gap-3 min-w-0">
+                <div className="w-10 h-10 rounded-xl bg-cyan-500/10 border border-cyan-500/30 flex items-center justify-center text-cyan-400 shrink-0">
+                  <Search className="w-5 h-5" />
+                </div>
+                <div className="min-w-0">
+                  <span className="text-[9px] font-bold text-cyan-400 uppercase tracking-wider block">
+                    Perisikan Lawan
+                  </span>
+                  <div className="text-xs font-bold text-white truncate">Laporan Pengakap</div>
+                  <p className="text-[10px] text-slate-400 truncate">Analisis bahaya & cadangan taktik balas</p>
+                </div>
+              </div>
+              <button
+                onClick={() => setShowScoutingModal(true)}
+                className="px-3 py-1.5 rounded-xl bg-cyan-500/20 hover:bg-cyan-500/30 border border-cyan-500/40 text-cyan-300 text-xs font-bold transition shrink-0 cursor-pointer"
+              >
+                Semak
+              </button>
+            </div>
+
+            {/* Scenario Challenge Mode Action */}
+            <div className="p-3.5 rounded-2xl bg-gradient-to-r from-amber-950/40 via-yellow-950/20 to-navy-900 border border-amber-800/40 flex items-center justify-between shadow-xl">
+              <div className="flex items-center gap-3 min-w-0">
+                <div className="w-10 h-10 rounded-xl bg-amber-500/20 border border-amber-500/40 flex items-center justify-center text-amber-300 shrink-0">
+                  <Target className="w-5 h-5" />
+                </div>
+                <div className="min-w-0">
+                  <span className="text-[9px] font-bold text-amber-400 uppercase tracking-wider block">
+                    Mod Cabaran
+                  </span>
+                  <div className="text-xs font-bold text-white truncate">Misi Keajaiban</div>
+                  <p className="text-[10px] text-slate-400 truncate">Senario genting & ganjaran kredit</p>
+                </div>
+              </div>
+              <button
+                onClick={() => setShowScenarioModal(true)}
+                className="px-3 py-1.5 rounded-xl bg-amber-500 hover:bg-amber-400 text-navy-950 font-bold text-xs transition shrink-0 cursor-pointer shadow-md shadow-amber-500/20"
+              >
+                Pilih Misi
+              </button>
+            </div>
           </div>
 
           {/* AI Opponent Selector Carousel / Grid */}
@@ -533,6 +633,20 @@ export const MatchTab: React.FC = () => {
                   <Volume2 className="w-4 h-4 text-emerald-400" />
                 ) : (
                   <VolumeX className="w-4 h-4 text-slate-500" />
+                )}
+              </button>
+
+              <button
+                onClick={() => toggleCommentaryVoice()}
+                className="p-2.5 rounded-xl bg-navy-950 border border-slate-700 hover:border-slate-600 transition cursor-pointer"
+                title={profile.commentaryVoiceEnabled ?? true ? 'Matikan Suara Ulasan' : 'Hidupkan Suara Ulasan'}
+                aria-label="Toggle Commentary Voice"
+                data-testid="commentary-voice-toggle"
+              >
+                {profile.commentaryVoiceEnabled ?? true ? (
+                  <Mic className="w-4 h-4 text-cyan-400" />
+                ) : (
+                  <MicOff className="w-4 h-4 text-slate-500" />
                 )}
               </button>
             </div>
@@ -912,6 +1026,30 @@ export const MatchTab: React.FC = () => {
         isOpen={showPvPModal}
         onClose={() => setShowPvPModal(false)}
         onStartPvPMatch={handleStartPvPMatch}
+      />
+
+      {/* Version 0.7.0 Opposition Scouting Report Modal */}
+      <ScoutingReportModal
+        isOpen={showScoutingModal}
+        onClose={() => setShowScoutingModal(false)}
+        opponent={createClubSnapshot(
+          generateClub(
+            selectedOpponentConfig.name,
+            selectedOpponentConfig.primaryColor,
+            selectedOpponentConfig.secondaryColor,
+            selectedOpponentConfig.badgeId,
+            selectedOpponentConfig.formation,
+            selectedOpponentConfig.tactics,
+            1234
+          )
+        )}
+      />
+
+      {/* Version 0.7.0 Scenario Challenge Modal */}
+      <ScenarioChallengeModal
+        isOpen={showScenarioModal}
+        onClose={() => setShowScenarioModal(false)}
+        onStartScenario={handleStartScenario}
       />
     </div>
   );

@@ -62,6 +62,8 @@ describe('IndexedDB Persistence Layer (db.ts)', () => {
     experienceLevel: 4,
     soundEnabled: true,
     replaySpeed: 2,
+    commentaryVoiceEnabled: true,
+    commentaryLanguage: 'ms',
   };
 
   const dummyMatch: MatchResult = {

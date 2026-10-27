@@ -6,6 +6,8 @@ import { Users, Shield, Zap, Compass, CheckCircle2, AlertCircle, ArrowUpDown, In
 import { TrainingView } from '../components/squad/TrainingView';
 import { TransfersView } from '../components/squad/TransfersView';
 import { KitDesignerModal } from '../components/squad/KitDesignerModal';
+import { PlayerRoleSelectorModal } from '../components/squad/PlayerRoleSelectorModal';
+import { ROLE_DEFINITIONS } from '../types/roles';
 
 export const SquadTab: React.FC = () => {
   const { club, updateFormation, updateTactics, setStartingXI } = useGameStore();
@@ -15,6 +17,7 @@ export const SquadTab: React.FC = () => {
   const [filterPos, setFilterPos] = useState<'ALL' | PlayerPosition>('ALL');
   const [inspectedPlayer, setInspectedPlayer] = useState<Player | null>(null);
   const [showKitModal, setShowKitModal] = useState(false);
+  const [roleModalPlayer, setRoleModalPlayer] = useState<Player | null>(null);
 
   if (!club) return null;
 
@@ -463,6 +466,24 @@ export const SquadTab: React.FC = () => {
                           🟥 {player.redCards}
                         </span>
                       )}
+                      {player.role && ROLE_DEFINITIONS[player.role] && (
+                        <button
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            setRoleModalPlayer(player);
+                          }}
+                          className="text-[9px] font-bold text-cyan-300 bg-cyan-950/70 border border-cyan-800/60 px-1.5 py-0.5 rounded flex items-center gap-1 hover:border-cyan-400 cursor-pointer"
+                          title="Klik untuk ubah peranan taktikal pemain"
+                        >
+                          <span>{ROLE_DEFINITIONS[player.role].icon}</span>
+                          <span>{player.role}</span>
+                        </button>
+                      )}
+                      {player.isTOTW && (
+                        <span className="text-[9px] font-black uppercase text-amber-300 bg-gradient-to-r from-amber-500/30 to-yellow-500/30 border border-amber-400/50 px-1.5 py-0.2 rounded shadow-sm shadow-amber-500/20">
+                          ⭐ TOTW
+                        </span>
+                      )}
                     </div>
                     <div className="text-[10px] text-slate-400 font-mono mt-0.5 flex items-center gap-1.5 flex-wrap">
                       <span>SPD {player.attributes.speed} • PAS {player.attributes.passing} • DEF {player.attributes.defense} • ATT {player.attributes.attack}</span>
@@ -494,6 +515,13 @@ export const SquadTab: React.FC = () => {
 
     {/* Kit Designer Modal */}
     <KitDesignerModal isOpen={showKitModal} onClose={() => setShowKitModal(false)} />
+
+    {/* Player Tactical Role Selector Modal */}
+    <PlayerRoleSelectorModal
+      isOpen={!!roleModalPlayer}
+      player={roleModalPlayer}
+      onClose={() => setRoleModalPlayer(null)}
+    />
   </div>
   );
 };

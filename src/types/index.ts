@@ -1,3 +1,5 @@
+import { PlayerRole } from './roles';
+
 export type PlayerPosition = 'GK' | 'DEF' | 'MID' | 'ATT';
 
 export interface PlayerAttributes {
@@ -26,6 +28,8 @@ export interface Player {
   potentialRating?: number;
   morale?: number; // 0 - 100%, defaults to 80
   matchRating?: number; // 1.0 - 10.0 in-match rating
+  role?: PlayerRole; // Version 0.7.0 Tactical Role
+  isTOTW?: boolean; // Version 0.7.0 Team of the Week honor
 }
 
 export type FormationType = '4-3-3' | '4-4-2' | '4-2-3-1';
@@ -88,6 +92,7 @@ export interface Club {
   kitPattern?: 'solid' | 'stripes' | 'hoops' | 'half';
   pvpRating?: number; // Elo rating, default 1200
   pvpRecord?: { won: number; drawn: number; lost: number };
+  completedScenarios?: string[]; // Version 0.7.0 completed scenario challenge IDs
 }
 
 // Match Simulation Event Timeline
@@ -168,6 +173,8 @@ export interface ManagerProfile {
   experienceLevel: number;
   soundEnabled: boolean;
   replaySpeed: 1 | 2 | 4;
+  commentaryVoiceEnabled?: boolean; // Version 0.7.0 Web Speech API toggle
+  commentaryLanguage?: 'ms' | 'en'; // Version 0.7.0 language preference
 }
 
 // Player Progression & Training
@@ -216,4 +223,7 @@ export interface Trophy {
 export * from './league';
 export * from './cup';
 export * from './pvp';
+export * from './roles';
+export * from './scenarios';
+export * from './totw';
 

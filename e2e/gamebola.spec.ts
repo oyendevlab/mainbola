@@ -39,6 +39,15 @@ test.describe('MainBola PWA Vertical Slice', () => {
     // Verify Starting XI is valid
     await expect(page.locator('text=Starting XI Valid')).toBeVisible();
 
+    // Verify v0.7.0 Tactical Role badge on player card
+    const roleBadgeBtn = page.locator('button:has-text("Poacher"), button:has-text("Stopper"), button:has-text("Playmaker")').first();
+    if (await roleBadgeBtn.isVisible()) {
+      await roleBadgeBtn.click();
+      await expect(page.locator('text=Peranan Taktikal Pemain')).toBeVisible();
+      await page.getByRole('button', { name: 'Kekalkan Pilihan Sedia Ada' }).click();
+      await expect(page.locator('text=Peranan Taktikal Pemain')).not.toBeVisible();
+    }
+
     // 5. Navigate to Match Tab & Start Quick Match
     await page.getByRole('button', { name: 'Match', exact: true }).click();
     await expect(page.locator('text=Quick Match Simulator')).toBeVisible();
@@ -47,6 +56,21 @@ test.describe('MainBola PWA Vertical Slice', () => {
     await expect(page.locator('text=Ramalan Cuaca Padang')).toBeVisible();
     await expect(page.locator('text=Sidang Media Pra-Perlawanan')).toBeVisible();
     await expect(page.locator('text=Cabaran PvP (Lawan Rakan)')).toBeVisible();
+
+    // Verify v0.7.0 Scouting Report Modal
+    const scoutBtn = page.getByRole('button', { name: 'Semak' });
+    await expect(scoutBtn).toBeVisible();
+    await scoutBtn.click();
+    await expect(page.locator('text=Laporan Pengakap Lawan')).toBeVisible();
+    await page.getByRole('button', { name: 'Faham & Rangka Taktik' }).click();
+    await expect(page.locator('text=Laporan Pengakap Lawan')).not.toBeVisible();
+
+    // Verify v0.7.0 Scenario Challenge Modal
+    const scenarioBtn = page.getByRole('button', { name: 'Pilih Misi' });
+    await expect(scenarioBtn).toBeVisible();
+    await scenarioBtn.click();
+    await expect(page.locator('text=Misi Keajaiban (Mod Senario)')).toBeVisible();
+    await page.locator('div[role="dialog"] button, .fixed button').filter({ hasText: '' }).first().click();
 
     // Test Press Conference Modal
     const pressBtn = page.getByRole('button', { name: 'Masuk' });
@@ -73,6 +97,11 @@ test.describe('MainBola PWA Vertical Slice', () => {
     const audioBtn = page.getByTestId('sound-toggle');
     await expect(audioBtn).toBeVisible();
     await audioBtn.click();
+
+    // Test commentary voice toggle (v0.7.0)
+    const voiceBtn = page.getByTestId('commentary-voice-toggle');
+    await expect(voiceBtn).toBeVisible();
+    await voiceBtn.click();
 
     // Open Stats Breakdown
     const statsBtn = page.locator('button:has-text("Stats")');
@@ -105,6 +134,14 @@ test.describe('MainBola PWA Vertical Slice', () => {
     await expect(page.locator('text=Champions Cup')).toBeVisible();
     await expect(page.locator('text=League Table')).toBeVisible();
     await expect(page.locator('td').filter({ hasText: 'Garuda Rovers FC' })).toBeVisible();
+
+    // Verify v0.7.0 Team of the Week (TOTW)
+    const totwBtn = page.getByRole('button', { name: 'Lihat TOTW' });
+    if (await totwBtn.isVisible()) {
+      await totwBtn.click();
+      await expect(page.locator('text=Pasukan Terbaik Mingguan (TOTW)')).toBeVisible();
+      await page.getByRole('button', { name: 'Tutup Senarai TOTW' }).click();
+    }
 
     // Switch to Fixtures Tab
     await page.locator('button:has-text("Fixtures")').click();

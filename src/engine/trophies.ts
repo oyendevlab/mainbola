@@ -54,6 +54,13 @@ export const TROPHY_DEFINITIONS: Record<string, Trophy> = {
     icon: '⚔️',
     category: 'PVP',
   },
+  SCENARIO_MASTER: {
+    id: 'SCENARIO_MASTER',
+    title: 'Pakar Strategi Senario',
+    description: 'Menyelesaikan sekurang-kurangnya 1 Cabaran Senario Klasik.',
+    icon: '🎯',
+    category: 'CHALLENGE',
+  },
 };
 
 /**
@@ -190,6 +197,15 @@ export function evaluateUnlockedTrophies(
     });
   }
 
+  // 8. SCENARIO_MASTER: Completed at least 1 scenario challenge
+  const scenariosCompleted = club.completedScenarios?.length ?? 0;
+  if (scenariosCompleted >= 1) {
+    unlocked.push({
+      ...TROPHY_DEFINITIONS.SCENARIO_MASTER,
+      unlockedAt: getLatestTimestamp(),
+    });
+  }
+
   return unlocked;
 }
 
@@ -300,6 +316,17 @@ export function calculateTrophyProgress(
         target: 5,
         percentage: isCompleted ? 100 : Math.round((current / 5) * 100),
         isCompleted,
+      };
+    }
+
+    case 'SCENARIO_MASTER': {
+      const completed = club.completedScenarios?.length ?? 0;
+      const target = 1;
+      return {
+        current: completed,
+        target,
+        percentage: Math.min(100, Math.round((completed / target) * 100)),
+        isCompleted: completed >= target,
       };
     }
 

@@ -9,6 +9,7 @@ import {
   MatchResult,
   Player,
   PlayerAttributes,
+  PlayerRole,
   SponsorDeal,
   TacticalStyle,
   TrainingDrillType,
@@ -145,6 +146,12 @@ export interface GameState {
     pattern?: 'solid' | 'stripes' | 'hoops' | 'half'
   ) => Promise<void>;
   answerPressConference: (moraleDelta: number) => Promise<void>;
+
+  // Version 0.7.0 Tactical Roles, Scenario Challenges & Audio Commentary Actions
+  updatePlayerRole: (playerId: string, role: PlayerRole) => Promise<void>;
+  completeScenario: (scenarioId: string, reward: number) => Promise<void>;
+  toggleCommentaryVoice: (enabled?: boolean) => Promise<void>;
+  setCommentaryLanguage: (language: 'ms' | 'en') => Promise<void>;
 
   // Phase 4 Trophy & Season Awards
   claimLeaguePrize: () => Promise<{ prize: number; success: boolean; message: string }>;
@@ -1149,5 +1156,52 @@ export const useGameStore = create<GameState>((set, get) => ({
 
     await saveClub(updatedClub);
     set({ club: updatedClub });
+  },
+
+  updatePlayerRole: async (playerId: string, role: PlayerRole) => {
+    const { club } = get();
+    if (!club) return;
+
+    const updatedSquad = club.squad.map((p) => (p.id === playerId ? { ...p, role } : p));
+    const updatedClub: Club = { ...club, squad: updatedSquad };
+    await saveClub(updatedClub);
+    set({ club: updatedClub });
+  },
+
+  completeScenario: async (scenarioId: string, reward: number) => {
+    const { club } = get();
+    if (!club) return;
+
+    const completed = club.completedScenarios || [];
+    const isNew = !completed.includes(scenarioId);
+    const updatedCompleted = isNew ? [...completed, scenarioId] : completed;
+    const updatedClub: Club = {
+      ...club,
+      budget: club.budget + reward,
+      completedScenarios: updatedCompleted,
+    };
+    await saveClub(updatedClub);
+    set({ club: updatedClub });
+  },
+
+  toggleCommentaryVoice: async (enabled?: boolean) => {
+    const { profile } = get();
+    const newValue = enabled !== undefined ? enabled : !profile.commentaryVoiceEnabled;
+    const updatedProfile: ManagerProfile = {
+      ...profile,
+      commentaryVoiceEnabled: newValue,
+    };
+    await saveProfile(updatedProfile);
+    set({ profile: updatedProfile });
+  },
+
+  setCommentaryLanguage: async (language: 'ms' | 'en') => {
+    const { profile } = get();
+    const updatedProfile: ManagerProfile = {
+      ...profile,
+      commentaryLanguage: language,
+    };
+    await saveProfile(updatedProfile);
+    set({ profile: updatedProfile });
   },
 }));

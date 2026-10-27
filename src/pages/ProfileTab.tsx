@@ -17,6 +17,9 @@ import {
   Upload,
   FileJson,
   X,
+  Mic,
+  MicOff,
+  Languages,
 } from 'lucide-react';
 import { getAllTrophies } from '../engine/trophies';
 
@@ -25,6 +28,8 @@ export const ProfileTab: React.FC = () => {
     club,
     profile,
     updateProfile,
+    toggleCommentaryVoice,
+    setCommentaryLanguage,
     resetGame,
     matchHistory,
     unlockedTrophies,
@@ -297,7 +302,7 @@ export const ProfileTab: React.FC = () => {
               <VolumeX className="w-5 h-5 text-slate-500" />
             )}
             <div>
-              <div className="text-sm font-semibold text-white">Audio & Match Whistle</div>
+              <div className="text-sm font-semibold text-white">Audio &amp; Match Whistle</div>
               <div className="text-[11px] text-slate-400">Sound effects during 2D pixel replays</div>
             </div>
           </div>
@@ -313,6 +318,60 @@ export const ProfileTab: React.FC = () => {
               }`}
             />
           </button>
+        </div>
+
+        {/* Version 0.7.0 Web Speech Commentary Voice Toggle */}
+        <div className="flex items-center justify-between p-3 rounded-xl bg-navy-950 border border-slate-800">
+          <div className="flex items-center gap-3">
+            {profile.commentaryVoiceEnabled ?? true ? (
+              <Mic className="w-5 h-5 text-cyan-400" />
+            ) : (
+              <MicOff className="w-5 h-5 text-slate-500" />
+            )}
+            <div>
+              <div className="text-sm font-semibold text-white">Ulasan Suara Komentator (Web Speech)</div>
+              <div className="text-[11px] text-slate-400">Suara sorakan ulasan langsung semasa gol &amp; kad</div>
+            </div>
+          </div>
+          <button
+            onClick={() => toggleCommentaryVoice()}
+            className={`w-12 h-6 rounded-full transition-colors relative cursor-pointer ${
+              profile.commentaryVoiceEnabled ?? true ? 'bg-cyan-500' : 'bg-slate-700'
+            }`}
+          >
+            <div
+              className={`w-5 h-5 rounded-full bg-white transition-transform transform absolute top-0.5 left-0.5 ${
+                profile.commentaryVoiceEnabled ?? true ? 'translate-x-6' : 'translate-x-0'
+              }`}
+            />
+          </button>
+        </div>
+
+        {/* Commentary Language Selector */}
+        <div className="p-3 rounded-xl bg-navy-950 border border-slate-800">
+          <div className="flex items-center gap-2 mb-1">
+            <Languages className="w-4 h-4 text-cyan-400" />
+            <div className="text-sm font-semibold text-white">Bahasa Ulasan Komentator</div>
+          </div>
+          <div className="text-[11px] text-slate-400 mb-2.5">Pilihan dialek bahasa pertuturan pengulas</div>
+          <div className="flex gap-2">
+            {[
+              { id: 'ms', label: 'Bahasa Melayu' },
+              { id: 'en', label: 'English (US)' },
+            ].map((lang) => (
+              <button
+                key={lang.id}
+                onClick={() => setCommentaryLanguage(lang.id as 'ms' | 'en')}
+                className={`flex-1 py-1.5 rounded-lg font-bold text-xs border transition-all cursor-pointer ${
+                  (profile.commentaryLanguage ?? 'ms') === lang.id
+                    ? 'border-cyan-500 bg-cyan-500/10 text-cyan-300'
+                    : 'border-slate-800 bg-navy-900 text-slate-400 hover:border-slate-700'
+                }`}
+              >
+                {lang.label}
+              </button>
+            ))}
+          </div>
         </div>
 
         {/* Default Replay Speed */}

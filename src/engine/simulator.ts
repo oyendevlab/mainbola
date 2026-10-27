@@ -64,11 +64,14 @@ function calculateTeamStrengths(startingXI: Player[]): TeamStrengths {
   const mids = startingXI.filter((p) => p.position === 'MID');
   const atts = startingXI.filter((p) => p.position === 'ATT');
 
-  // Fitness and morale impact: 100% fitness = 1.0; 80% morale = 1.0
+  // Fitness, morale, TOTW and role impact: 100% fitness = 1.0; 80% morale = 1.0
   const getEffective = (p: Player) => {
     const fitMult = p.fitness !== undefined ? (0.65 + 0.35 * (p.fitness / 100)) : 1.0;
     const morMult = p.morale !== undefined ? (0.92 + 0.10 * (p.morale / 100)) : 1.0;
-    return p.overallRating * fitMult * morMult;
+    const totwMult = p.isTOTW ? 1.04 : 1.0;
+    // Role alignment bonus (+3% when a tactical role is assigned)
+    const roleMult = p.role ? 1.03 : 1.0;
+    return p.overallRating * fitMult * morMult * totwMult * roleMult;
   };
 
   const avgRating = (players: Player[], defaultVal = 65) =>

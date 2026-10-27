@@ -228,4 +228,54 @@
 
 ---
 
-## 🔮 Version 0.7.0: Real-Time Audio Commentary, Matchday Weather Forecast, & Advanced Tournaments (Planned)
+## 🌟 Version 0.7.0: Peranan Taktikal Pemain, Ulasan Suara Langsung (Web Speech API), Laporan Risikan Lawan, Skuad Terbaik Mingguan (TOTW) & Mod Cabaran Senario (COMPLETED)
+
+- [x] **1. Peranan Taktikal Pemain / Tactical Player Roles (`src/types/roles.ts`, `src/components/squad/PlayerRoleSelectorModal.tsx`)**:
+  - [x] 11 Peranan taktikal khusus:
+    - ATT: Poacher (Penyudah Berbisa), Target Man (Sasaran Udara), False 9 (Penyerang Bayangan).
+    - MID: Playmaker (Perancang Utama), Box-to-Box (Pemain Enjin), Ball-Winner (Pemusnah Serangan).
+    - DEF: Stopper (Tembok Kebal), Ball-Playing Defender (Pertahanan Moden), Fullback (Pertahanan Sayap).
+    - GK: Sweeper Keeper (Penjaga Gol Aktif), Traditional (Penjaga Tiang Tradisional).
+  - [x] Pengaruh taktikal individu dalam simulasi perlawanan (`simulator.ts`): +3% bonus sinergi formasi/posisi dan penyelarasan statistik serang/tahan.
+  - [x] UI interaktif pada kad pemain dengan lencana warna peranan dan modal pemilihan peranan intuitif.
+- [x] **2. Ulasan Suara Langsung / Web Speech API Match Commentary (`src/engine/commentary.ts`)**:
+  - [x] Announcer suara berasaskan native browser `window.speechSynthesis` (100% tanpa fail audio luar / zero network latency).
+  - [x] Sokongan dwibahasa: Bahasa Melayu (🇲🇾) dan English (🇬🇧).
+  - [x] Template ulasan langsung penuh emosi untuk detik genting: Gol, Kad Merah/Kuning, Penyelamatan Hebat (Saves), Tackle Bersih, dan Tamat Perlawanan (Fulltime).
+  - [x] Kawalan suara di Match Tab (butang pembesar suara hidup/mati) dan Profil Pengurus (pilihan bahasa & tetapan suara).
+- [x] **3. Laporan Risikan Lawan / Opposition Scouting Intel (`src/engine/scouting.ts`, `src/components/match/ScoutingReportModal.tsx`)**:
+  - [x] Analisis kekuatan & kelemahan pasukan lawan secara terperinci sebelum perlawanan bermula.
+  - [x] Pengesanan "Pemain Paling Berbahaya" (Key Threat) berdasarkan rating dan statistik jaringan.
+  - [x] Nasihat taktikal balas (Counter-Tactics Advice) & penunjuk Zon Bahaya serangan lawan.
+- [x] **4. Pasukan Terbaik Mingguan / Team of the Week (TOTW) (`src/engine/totw.ts`, `src/types/totw.ts`, `src/components/league/TeamOfTheWeekModal.tsx`)**:
+  - [x] Algoritma pemilihan 11 pemain berprestasi tertinggi dalam liga mengikut formasi 4-3-3 selepas setiap pusingan perlawanan.
+  - [x] Penghormatan TOTW: Kad pemain dengan lencana holografik emas, dorongan moral penuh 100%, serta bonus +50 XP.
+  - [x] Paparan visual dream team 11 bintang dalam League Tab.
+- [x] **5. Mod Cabaran Senario / Scenario Challenges ("Misi Keajaiban") (`src/engine/scenarios.ts`, `src/types/scenarios.ts`, `src/components/match/ScenarioChallengeModal.tsx`)**:
+  - [x] 3 Senario cabaran bersejarah:
+    - *Keajaiban 10 Pemain*: Ketinggalan 1-2 pada minit ke-70 dengan kad merah, bangkit untuk menang.
+    - *Tembok Kebal Kebangsaan*: Mempertahankan pendahuluan 1-0 pada 20 minit terakhir daripada asakan bertubi-tubi.
+    - *Wira Akademi Tempatan*: Barisan pemain akademi menentang gergasi liga.
+  - [x] Ganjaran kredit dan Trofi Eksklusif baharu: *Pakar Strategi Senario (Scenario Master)*.
+- [x] **6. Pengesahan Kualiti, Ujian Unit & Ujian E2E**:
+  - [x] 16 ujian unit baharu untuk v0.7.0.
+  - [x] Jumlah keseluruhan 184 ujian unit lulus (100% passing merentasi 22 test suites).
+  - [x] Playwright E2E browser test lulus menguji kesemua ciri baharu termasuk modal peranan, scouting, senario, ulasan suara, dan TOTW.
+  - [x] Kompilasi TypeScript bersih dan Vite PWA production build sifar ralat.
+
+---
+
+## 🔮 Version 0.8.0: Multi-League Pyramid, International Cups, Cloud Backup, & Advanced Sound Design (Planned)
+
+- [ ] **1. Sistem Piramid Liga Berbilang Tahap (Multi-Tier Pyramid & Promotion/Relegation)**:
+  - Liga Super & Liga Perdana dengan sistem promosi dan penyingkiran automatik pada akhir musim.
+  - Hadiah trofi kejuaraan mengikut tahap liga dan bonus kewangan kelayakan.
+- [ ] **2. Kejohanan Piala Antarabangsa / Jemputan Serantau (Regional Cup Tournaments)**:
+  - Format kalah mati (Knockout Tournament) dengan pusingan penalti dramatik.
+  - Kalendar perlawanan padat yang menuntut penggiliran skuad (squad rotation).
+- [ ] **3. Sandaran Awan & Perkongsian Data (Cloud Sync & Cross-Device Backup)**:
+  - Eksport dan import fail sandaran JSON disulitkan atau integrasi Cloud storage.
+  - Sinkronisasi selamat merentas pelayar dan peranti mudah alih.
+- [ ] **4. Reka Bentuk Bunyi Dipertingkat (Enhanced Retro Audio Engine)**:
+  - Kesan sorakan penonton dinamik bergantung kepada momentum perlawanan menggunakan sintesis audio Web Audio API.
+  - Pelbagai variasi bunyi tiupan wisel pengadil dan tembakan bola terkena tiang.

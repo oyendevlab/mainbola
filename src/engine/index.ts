@@ -10,4 +10,8 @@ export * from './pvp';
 export * from './weather';
 export * from './press';
 export * from './ratings';
+export * from './commentary';
+export * from './scouting';
+export * from './totw';
+export * from './scenarios';
 

@@ -3,6 +3,7 @@ import { useGameStore } from '../store/useGameStore';
 import { BadgeIcon } from '../components/common/BadgeIcon';
 import { PhaserGame } from '../renderer/PhaserGame';
 import { KnockoutCupView } from '../components/cup/KnockoutCupView';
+import { TeamOfTheWeekModal } from '../components/league/TeamOfTheWeekModal';
 import {
   Trophy,
   KeyRound,
@@ -44,6 +45,7 @@ export const LeagueTab: React.FC = () => {
   const [selectedRound, setSelectedRound] = useState(activeLeague?.currentRound || 1);
   const [inspectingFixture, setInspectingFixture] = useState<LeagueFixture | null>(null);
   const [tournamentMode, setTournamentMode] = useState<'league' | 'cup'>('league');
+  const [showTOTWModal, setShowTOTWModal] = useState(false);
 
   if (!club) return null;
 
@@ -335,6 +337,23 @@ export const LeagueTab: React.FC = () => {
               </div>
             </div>
           )}
+
+          {/* Version 0.7.0 Team of the Week CTA */}
+          <div className="flex items-center justify-between p-3 rounded-xl bg-gradient-to-r from-amber-500/10 via-yellow-500/5 to-amber-500/10 border border-amber-500/30">
+            <div className="flex items-center gap-2.5">
+              <span className="text-xl">🌟</span>
+              <div>
+                <span className="text-xs font-bold text-white block">Skuad Terbaik Mingguan (TOTW)</span>
+                <span className="text-[10px] text-slate-400">Pemain berprestasi cemerlang pusingan ini</span>
+              </div>
+            </div>
+            <button
+              onClick={() => setShowTOTWModal(true)}
+              className="px-3 py-1.5 rounded-lg bg-amber-500 hover:bg-amber-400 text-navy-950 font-bold text-xs transition cursor-pointer shadow-md shadow-amber-500/20"
+            >
+              Lihat TOTW
+            </button>
+          </div>
 
           {/* Subtabs Selector: Standings, Fixtures, Top Scorers */}
           <div className="grid grid-cols-3 gap-1.5 bg-navy-950 p-1 rounded-xl border border-slate-800">
@@ -748,6 +767,9 @@ export const LeagueTab: React.FC = () => {
           </div>
         </div>
       )}
+
+      {/* Team of the Week Modal */}
+      <TeamOfTheWeekModal isOpen={showTOTWModal} onClose={() => setShowTOTWModal(false)} />
         </>
       )}
     </div>

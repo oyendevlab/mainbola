@@ -2,6 +2,7 @@ import { openDB, DBSchema, IDBPDatabase } from 'idb';
 import { Club, KnockoutCup, ManagerProfile, MatchResult, TransferTarget } from '../types';
 import { League } from '../types/league';
 import { calculatePlayerMarketValue } from '../engine/generator';
+import { getDefaultRoleForPosition } from '../types/roles';
 
 export const DB_NAME = 'goal_rush_db';
 export const DB_VERSION = 4;
@@ -176,6 +177,9 @@ function normalizeClub(club: Club): Club {
   if (!club.pvpRecord) {
     club.pvpRecord = { won: 0, drawn: 0, lost: 0 };
   }
+  if (!club.completedScenarios) {
+    club.completedScenarios = [];
+  }
   if (Array.isArray(club.squad)) {
     club.squad = club.squad.map((p) => ({
       ...p,
@@ -187,6 +191,7 @@ function normalizeClub(club: Club): Club {
       isSuspended: p.isSuspended ?? false,
       isYouthProduct: p.isYouthProduct ?? false,
       morale: p.morale ?? 80,
+      role: p.role ?? getDefaultRoleForPosition(p.position),
     }));
   }
   return club;
@@ -247,7 +252,12 @@ export async function getProfile(): Promise<ManagerProfile | null> {
   try {
     const db = await getDb();
     const profile = await db.get('manager', PROFILE_KEY);
-    return profile ?? null;
+    if (!profile) return null;
+    return {
+      ...profile,
+      commentaryVoiceEnabled: profile.commentaryVoiceEnabled ?? true,
+      commentaryLanguage: profile.commentaryLanguage ?? 'ms',
+    };
   } catch (err) {
     console.error('[IndexedDB] getProfile error:', err);
     return null;

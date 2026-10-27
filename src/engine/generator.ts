@@ -8,6 +8,7 @@ import {
   TacticalStyle,
 } from '../types';
 import { FORMATION_CONFIGS, validateSquadSelection } from '../types/formations';
+import { getDefaultRoleForPosition } from '../types/roles';
 import { PRNG, createPRNG } from './prng';
 
 export const FIRST_NAMES = [
@@ -277,6 +278,7 @@ export function generatePlayer(
     trainingXp: 0,
     marketValue: calculatePlayerMarketValue(overallRating),
     morale: 80,
+    role: getDefaultRoleForPosition(position),
   };
 }
 
