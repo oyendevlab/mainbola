@@ -320,6 +320,30 @@
 
 ---
 
+## 🚀 Version 0.7.3: Advanced Animation Polish, Progressive Formations, Stadium Grandstand & 2nd Half Side Switch (Completed)
+
+- [x] **1. Kemaraan Serangan Berperingkat & Unduran Pertahanan Padat (`aiSteering.ts`)**:
+  - [x] Kemaraan berasaskan `ballProgress` sepanjang zon padang (progressive build-up wave) untuk penyerang, pemain tengah, dan pertahanan.
+  - [x] Unduran pertahanan padat (controlled compact retreat) mengekalkan bentuk blok padat shielding the box.
+- [x] **2. Animasi Pemain Bergerak dengan Ayunan Badan Naik Turun (*Vertical Bounce & Bobbing*)**:
+  - [x] Ayunan Y dinamik (`+0.5px` / `-1.5px`) pada sprite semasa berlari mengikut bingkai `_run1` & `_run2`.
+  - [x] Ayunan mikro pernafasan semulajadi semasa pemain berdiri santai (*idle stance breathing*).
+- [x] **3. Penonton Stadium Retro di Bahagian Atas Padang (*Grandstand Spectators*)**:
+  - [x] Tempat duduk teres konkrit stadium dan papan iklan perimeter LED retro (y = 12..22).
+  - [x] 40+ sprite penonton piksel (warna Home, Away, Neutral) dengan ayunan bersorak rawak berkala.
+  - [x] Gelombang keraian bergemuruh (*stadium celebration wave*) semasa gol dan percubaan berbahaya.
+- [x] **4. Pertukaran Sisi Separuh Masa Kedua (*Half-Time Switch Sides*)**:
+  - [x] Pasukan bertukar sisi secara automatik pada minit ke-45 atau acara `HALFTIME`.
+  - [x] Base position pemain dicerminkan merentasi garisan tengah (`PITCH_LEFT + PITCH_RIGHT - baseX`).
+  - [x] Animasi perarakan tukar tempat (team relocation march) diiringi banner `★ 2ND HALF - SWITCH SIDES ★`.
+  - [x] Koordinat acara, sasaran rembatan, dan gegaran jaring gol diselaraskan dengan sisi baharu.
+- [x] **5. Ujian & Jaminan Kualiti**:
+  - [x] 194/194 unit tests lulus 100% merentasi 23 test suites.
+  - [x] Ujian Playwright E2E browser lulus tanpa sebarang ralat.
+  - [x] Kompilasi TypeScript dan binaan PWA Vite sifar ralat.
+
+---
+
 ## 🔮 Version 0.8.0: Multi-League Pyramid, International Cups, Cloud Backup, & Advanced Sound Design (Planned)
 
 - [ ] **1. Sistem Piramid Liga Berbilang Tahap (Multi-Tier Pyramid & Promotion/Relegation)**:

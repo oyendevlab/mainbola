@@ -68,11 +68,11 @@ interface PitchPlayer {
 const PITCH_LEFT = 24;
 const PITCH_RIGHT = 456;
 const PITCH_WIDTH = 432;
-const PITCH_TOP = 16;
+const PITCH_TOP = 22;
 const PITCH_BOTTOM = 254;
-const PITCH_HEIGHT = 238;
+const PITCH_HEIGHT = 232;
 const HALFWAY_X = 240;
-const CENTER_Y = 135;
+const CENTER_Y = 138;
 
 export class MatchScene extends Phaser.Scene {
   // Config & State
@@ -84,6 +84,7 @@ export class MatchScene extends Phaser.Scene {
   private speedMultiplier: 1 | 2 | 4 = 1;
   private isPausedState = false;
   private isFinished = false;
+  private isSecondHalf = false;
 
   private homeTeam: TeamVisualInfo = {
     id: 'home',
@@ -112,6 +113,13 @@ export class MatchScene extends Phaser.Scene {
   private netGraphicsLeft!: Phaser.GameObjects.Graphics;
   private netGraphicsRight!: Phaser.GameObjects.Graphics;
   private players: PitchPlayer[] = [];
+  private crowdSprites: Array<{
+    sprite: Phaser.GameObjects.Sprite;
+    baseY: number;
+    baseKey: string;
+    cheerKey: string;
+  }> = [];
+  private crowdTimer: Phaser.Time.TimerEvent | null = null;
   private ballSprite!: Phaser.GameObjects.Sprite;
   private ballShadow!: Phaser.GameObjects.Sprite;
   private ballX = HALFWAY_X;
@@ -150,6 +158,7 @@ export class MatchScene extends Phaser.Scene {
     this.homeScore = 0;
     this.awayScore = 0;
     this.isFinished = false;
+    this.isSecondHalf = false;
   }
 
   preload(): void {
@@ -161,25 +170,28 @@ export class MatchScene extends Phaser.Scene {
     // 1. Draw 16-bit pitch
     this.drawPitch();
 
-    // 2. Create HUD overlays
+    // 2. Setup Top Grandstand Spectator Crowd (v0.7.3)
+    this.setupCrowd();
+
+    // 3. Create HUD overlays
     this.createHud();
 
-    // 3. Create 22 players on the pitch
+    // 4. Create 22 players on the pitch
     this.setupPlayers();
 
-    // 4. Create ball and shadow
+    // 5. Create ball and shadow
     this.setupBall();
 
-    // 5. Start ambient player breathing/idling
+    // 6. Start ambient player breathing/idling
     this.startAmbientIdling();
 
-    // 6. Setup dynamic weather effects (rain particles or night lights)
+    // 7. Setup dynamic weather effects (rain particles or night lights)
     this.setupWeatherEffects();
 
-    // 7. Start ambient stadium crowd background audio (v0.7.1)
+    // 8. Start ambient stadium crowd background audio (v0.7.1)
     startStadiumAmbience();
 
-    // 8. Begin event playback if events exist and not paused
+    // 9. Begin event playback if events exist and not paused
     if (!this.isPausedState) {
       this.scheduleNextEvent(600);
     }
@@ -301,6 +313,16 @@ export class MatchScene extends Phaser.Scene {
       'player_away_gk',
       'spark_pixel',
       'confetti_pixel',
+      'crowd_home_stand',
+      'crowd_home_cheer',
+      'crowd_away_stand',
+      'crowd_away_cheer',
+      'crowd_neutral_w_stand',
+      'crowd_neutral_w_cheer',
+      'crowd_neutral_y_stand',
+      'crowd_neutral_y_cheer',
+      'crowd_neutral_b_stand',
+      'crowd_neutral_b_cheer',
     ];
 
     for (const key of texturesToCreate) {
@@ -430,6 +452,168 @@ export class MatchScene extends Phaser.Scene {
       ctx.fillStyle = '#22C55E';
       ctx.fillRect(0, 0, 2, 2);
       turfCanvas.refresh();
+    }
+
+    // 8. Generate retro pixel grandstand spectators (v0.7.3)
+    this.createCrowdTextures(this.homeTeam.primaryColor, awayPrimary);
+  }
+
+  /**
+   * Generates retro pixel spectator textures for the grandstand (v0.7.3)
+   */
+  private createCrowdTextures(homeColor: string, awayColor: string): void {
+    const crowdVariants = [
+      { key: 'crowd_home', shirt: homeColor, hair: '#1E293B', skin: '#FCD34D' },
+      { key: 'crowd_away', shirt: awayColor, hair: '#78350F', skin: '#FBCFE8' },
+      { key: 'crowd_neutral_w', shirt: '#F8FAFC', hair: '#0F172A', skin: '#FDE047' },
+      { key: 'crowd_neutral_y', shirt: '#FACC15', hair: '#451A03', skin: '#E2E8F0' },
+      { key: 'crowd_neutral_b', shirt: '#0284C7', hair: '#1E1B4B', skin: '#FBBF24' },
+    ];
+
+    for (const v of crowdVariants) {
+      // 1. Stand pose (4x6)
+      const standCanvas = this.textures.createCanvas(`${v.key}_stand`, 4, 6);
+      if (standCanvas) {
+        const ctx = standCanvas.context;
+        ctx.clearRect(0, 0, 4, 6);
+        ctx.fillStyle = v.hair;
+        ctx.fillRect(1, 0, 2, 1);
+        ctx.fillStyle = v.skin;
+        ctx.fillRect(1, 1, 2, 2);
+        ctx.fillStyle = v.shirt;
+        ctx.fillRect(0, 3, 4, 3);
+        standCanvas.refresh();
+      }
+
+      // 2. Cheer pose (4x6 with raised hands)
+      const cheerCanvas = this.textures.createCanvas(`${v.key}_cheer`, 4, 6);
+      if (cheerCanvas) {
+        const ctx = cheerCanvas.context;
+        ctx.clearRect(0, 0, 4, 6);
+        // Raised hands
+        ctx.fillStyle = v.skin;
+        ctx.fillRect(0, 0, 1, 2);
+        ctx.fillRect(3, 0, 1, 2);
+        ctx.fillStyle = v.hair;
+        ctx.fillRect(1, 0, 2, 1);
+        ctx.fillStyle = v.skin;
+        ctx.fillRect(1, 1, 2, 2);
+        ctx.fillStyle = v.shirt;
+        ctx.fillRect(0, 3, 4, 3);
+        cheerCanvas.refresh();
+      }
+    }
+  }
+
+  /**
+   * Sets up animated retro spectators in the grandstand above the pitch (v0.7.3)
+   */
+  private setupCrowd(): void {
+    for (const c of this.crowdSprites) {
+      c.sprite.destroy();
+    }
+    this.crowdSprites = [];
+    if (this.crowdTimer) {
+      this.crowdTimer.destroy();
+      this.crowdTimer = null;
+    }
+
+    const crowdKeys = [
+      'crowd_home',
+      'crowd_away',
+      'crowd_neutral_w',
+      'crowd_neutral_y',
+      'crowd_neutral_b',
+    ];
+
+    const startX = PITCH_LEFT + 4;
+    const endX = PITCH_RIGHT - 4;
+    const stepX = 10;
+
+    for (let x = startX; x <= endX; x += stepX) {
+      // Back Row (y = 15)
+      const key1 = crowdKeys[Math.floor(Math.random() * crowdKeys.length)];
+      const sp1 = this.add.sprite(x, 15, `${key1}_stand`);
+      sp1.setDepth(3);
+      sp1.setOrigin(0.5, 0.5);
+      this.crowdSprites.push({
+        sprite: sp1,
+        baseY: 15,
+        baseKey: `${key1}_stand`,
+        cheerKey: `${key1}_cheer`,
+      });
+
+      // Front Row (y = 18.5, slightly offset horizontally)
+      if (x + 5 <= endX) {
+        const key2 = crowdKeys[Math.floor(Math.random() * crowdKeys.length)];
+        const sp2 = this.add.sprite(x + 5, 18.5, `${key2}_stand`);
+        sp2.setDepth(4);
+        sp2.setOrigin(0.5, 0.5);
+        this.crowdSprites.push({
+          sprite: sp2,
+          baseY: 18.5,
+          baseKey: `${key2}_stand`,
+          cheerKey: `${key2}_cheer`,
+        });
+      }
+    }
+
+    this.startAmbientCrowd();
+  }
+
+  private startAmbientCrowd(): void {
+    if (this.crowdTimer) this.crowdTimer.destroy();
+
+    this.crowdTimer = this.time.addEvent({
+      delay: 450,
+      loop: true,
+      callback: () => {
+        if (this.isPausedState || this.isFinished) return;
+
+        const pickCount = Phaser.Math.Between(4, 8);
+        for (let i = 0; i < pickCount; i++) {
+          const randIdx = Phaser.Math.Between(0, this.crowdSprites.length - 1);
+          const c = this.crowdSprites[randIdx];
+          if (!c.sprite.active) continue;
+
+          c.sprite.setY(c.baseY - 1);
+          if (Math.random() > 0.5) {
+            c.sprite.setTexture(c.cheerKey);
+          }
+
+          this.time.delayedCall(250, () => {
+            if (c.sprite.active) {
+              c.sprite.setY(c.baseY);
+              c.sprite.setTexture(c.baseKey);
+            }
+          });
+        }
+      },
+    });
+  }
+
+  /**
+   * Animated stadium crowd celebration for goals and exciting attempts (v0.7.3)
+   */
+  private celebrateCrowd(durationMs: number = 1400): void {
+    for (const c of this.crowdSprites) {
+      if (!c.sprite.active) continue;
+      c.sprite.setTexture(c.cheerKey);
+
+      this.tweens.add({
+        targets: c.sprite,
+        y: c.baseY - 2.5,
+        yoyo: true,
+        repeat: Math.floor(durationMs / 180),
+        duration: 90,
+        ease: 'Sine.easeInOut',
+        onComplete: () => {
+          if (c.sprite.active) {
+            c.sprite.setY(c.baseY);
+            c.sprite.setTexture(c.baseKey);
+          }
+        },
+      });
     }
   }
 
@@ -679,6 +863,19 @@ export class MatchScene extends Phaser.Scene {
     const outerColor = this.weather === 'Night' ? 0x0f2918 : 0x1a4d2e;
     this.pitchGraphics.fillStyle(outerColor, 1);
     this.pitchGraphics.fillRect(0, 0, 480, 270);
+
+    // Top Grandstand Terraces & Crowd Seating (y = 12 to 21) (v0.7.3)
+    this.pitchGraphics.fillStyle(0x1e293b, 1);
+    this.pitchGraphics.fillRect(PITCH_LEFT - 8, 12, PITCH_WIDTH + 16, 9.5);
+    // Concrete steps
+    this.pitchGraphics.fillStyle(0x334155, 1);
+    this.pitchGraphics.fillRect(PITCH_LEFT - 8, 16.5, PITCH_WIDTH + 16, 1);
+
+    // Perimeter Advertising LED Hoardings (y = 20.5 to 22)
+    this.pitchGraphics.fillStyle(0x090d16, 1);
+    this.pitchGraphics.fillRect(PITCH_LEFT - 4, 20.5, PITCH_WIDTH + 8, 2);
+    this.pitchGraphics.lineStyle(1, 0x38bdf8, 0.85);
+    this.pitchGraphics.lineBetween(PITCH_LEFT - 4, 21.5, PITCH_RIGHT + 4, 21.5);
 
     // Alternating grass stripes (12 vertical stripes)
     const stripeWidth = PITCH_WIDTH / 12; // 36px each
@@ -1278,9 +1475,13 @@ export class MatchScene extends Phaser.Scene {
 
   /**
    * Coordinate converter from normalized (0..100) to pitch screen pixels
+   * Accounts for half-time side flipping (v0.7.3)
    */
   private normToScreenX(normX: number): number {
-    return PITCH_LEFT + (Math.max(0, Math.min(100, normX)) / 100) * PITCH_WIDTH;
+    const effX = this.isSecondHalf
+      ? 100 - Math.max(0, Math.min(100, normX))
+      : Math.max(0, Math.min(100, normX));
+    return PITCH_LEFT + (effX / 100) * PITCH_WIDTH;
   }
 
   private normToScreenY(normY: number): number {
@@ -1300,6 +1501,11 @@ export class MatchScene extends Phaser.Scene {
 
     const event = this.matchEvents[this.currentEventIndex];
     this.currentMinute = event.minute;
+
+    // Automatic side switch if entering 2nd half without explicit HALFTIME event
+    if (this.currentMinute >= 45 && !this.isSecondHalf && event.type !== 'HALFTIME') {
+      this.switchSides();
+    }
 
     // Call React Callbacks
     this.callbacks.onTimeUpdate?.(this.currentMinute);
@@ -1399,11 +1605,13 @@ export class MatchScene extends Phaser.Scene {
       }
       case 'HALFTIME': {
         playWhistle('halftime');
-        this.animateWhistle('HALF TIME', 1000 / speed, () => {
-          if (this.callbacks.onHalftime) {
-            this.callbacks.onHalftime();
-          }
-          onComplete();
+        this.animateWhistle('HALF TIME', 800 / speed, () => {
+          this.switchSides(() => {
+            if (this.callbacks.onHalftime) {
+              this.callbacks.onHalftime();
+            }
+            onComplete();
+          });
         });
         break;
       }
@@ -1417,6 +1625,53 @@ export class MatchScene extends Phaser.Scene {
         this.animatePass(fromX, fromY, toX, toY, isHome, speed, onComplete);
         break;
       }
+    }
+  }
+
+  /**
+   * Switches sides for both teams at halftime with team relocation march (v0.7.3)
+   */
+  private switchSides(onComplete?: () => void): void {
+    if (this.isSecondHalf) {
+      onComplete?.();
+      return;
+    }
+    this.isSecondHalf = true;
+
+    this.showFloatingText('★ 2ND HALF - SWITCH SIDES ★', HALFWAY_X, CENTER_Y - 25, '#38BDF8');
+
+    const duration = 1000 / this.speedMultiplier;
+
+    // Invert baseX for each player across halfway line
+    for (const p of this.players) {
+      p.baseX = PITCH_LEFT + PITCH_RIGHT - p.baseX;
+      p.isMoving = true;
+      p.sprite.setTexture(`${p.texturePrefix}_run1`);
+
+      const moveTween = this.tweens.add({
+        targets: p.container,
+        x: p.baseX,
+        y: p.baseY,
+        duration,
+        ease: 'Sine.easeInOut',
+        onUpdate: (tween) => {
+          const step = Math.floor(tween.progress * 12);
+          const frameKey = step % 2 === 0 ? '_run1' : '_run2';
+          p.sprite.setTexture(`${p.texturePrefix}${frameKey}`);
+          p.sprite.setY(step % 2 === 0 ? -1.5 : 0.5);
+        },
+        onComplete: () => {
+          p.isMoving = false;
+          p.sprite.setTexture(`${p.texturePrefix}_stand`);
+          p.sprite.setY(0);
+          p.sprite.setAngle(0);
+        },
+      });
+      this.activeTweens.push(moveTween);
+    }
+
+    if (onComplete) {
+      this.time.delayedCall(duration + 100, onComplete);
     }
   }
 
@@ -1518,9 +1773,10 @@ export class MatchScene extends Phaser.Scene {
   ): void {
     const duration = Math.max(100, 500 / speed);
 
-    // Target goal line coordinates
-    // Home shoots at Right Goal (x = 456), Away shoots at Left Goal (x = 24)
-    const targetGoalX = isHomeShooting ? PITCH_RIGHT : PITCH_LEFT;
+    // Target goal line coordinates (swapped in 2nd half, v0.7.3)
+    const homeGoalTarget = this.isSecondHalf ? PITCH_LEFT : PITCH_RIGHT;
+    const awayGoalTarget = this.isSecondHalf ? PITCH_RIGHT : PITCH_LEFT;
+    const targetGoalX = isHomeShooting ? homeGoalTarget : awayGoalTarget;
     const targetGoalY = CENTER_Y + Phaser.Math.Between(-14, 14);
 
     this.ballSprite.setPosition(fromX, fromY);
@@ -1544,6 +1800,9 @@ export class MatchScene extends Phaser.Scene {
       });
     }
 
+    // Trigger crowd excitement
+    this.celebrateCrowd(600 / speed);
+
     // Find defending goalkeeper
     const defendingTeam = isHomeShooting ? 'away' : 'home';
     const gk = this.players.find((p) => p.team === defendingTeam && p.isGK);
@@ -1552,10 +1811,11 @@ export class MatchScene extends Phaser.Scene {
       gk.sprite.setTexture(`${gk.texturePrefix}_dive`);
       // Goalkeeper dives towards shot Y
       const diveY = isSaved ? targetGoalY : targetGoalY + (targetGoalY > CENTER_Y ? -8 : 8);
+      const isShootingRight = targetGoalX > HALFWAY_X;
       const tweenGk = this.tweens.add({
         targets: gk.container,
         y: diveY,
-        angle: isHomeShooting ? -20 : 20,
+        angle: isShootingRight ? -20 : 20,
         duration: duration * 0.85,
         ease: 'Quad.easeOut',
         yoyo: true,
@@ -1569,7 +1829,7 @@ export class MatchScene extends Phaser.Scene {
     }
 
     // Fast Ball Tween
-    const endX = isSaved ? targetGoalX + (isHomeShooting ? -12 : 12) : targetGoalX;
+    const endX = isSaved ? targetGoalX + (targetGoalX > HALFWAY_X ? -12 : 12) : targetGoalX;
     const endY = targetGoalY;
 
     const tweenShot = this.tweens.add({
@@ -1591,7 +1851,7 @@ export class MatchScene extends Phaser.Scene {
         if (isSaved) {
           this.showFloatingText('★ SAVED! ★', endX, endY - 14, '#38BDF8');
           // Rebound ball slightly
-          const reboundX = endX + (isHomeShooting ? -20 : 20);
+          const reboundX = endX + (targetGoalX > HALFWAY_X ? -20 : 20);
           const reboundY = endY + Phaser.Math.Between(-15, 15);
           this.tweens.add({
             targets: [this.ballSprite, this.ballShadow],
@@ -1621,8 +1881,11 @@ export class MatchScene extends Phaser.Scene {
     onComplete: () => void
   ): void {
     const shotDuration = Math.max(100, 450 / speed);
-    const netX = isHomeScored ? PITCH_RIGHT + 6 : PITCH_LEFT - 6;
+    const homeNetX = this.isSecondHalf ? PITCH_LEFT - 6 : PITCH_RIGHT + 6;
+    const awayNetX = this.isSecondHalf ? PITCH_RIGHT + 6 : PITCH_LEFT - 6;
+    const netX = isHomeScored ? homeNetX : awayNetX;
     const netY = CENTER_Y + Phaser.Math.Between(-12, 12);
+    const isRightGoal = netX > HALFWAY_X;
 
     // Position ball at shot start point
     this.ballX = fromX;
@@ -1645,7 +1908,7 @@ export class MatchScene extends Phaser.Scene {
       onComplete: () => {
         // 2. Shake Net and Screen
         this.cameras.main.shake(180 / speed, 0.006);
-        this.shakeNet(isHomeScored);
+        this.shakeNet(isRightGoal);
 
         // 3. Burst Confetti
         this.burstConfetti(netX, netY);
@@ -1654,7 +1917,10 @@ export class MatchScene extends Phaser.Scene {
         const scorerName = event.playerName || (isHomeScored ? this.homeTeam.name : this.awayTeam.name);
         this.showGoalBanner(scorerName, event.description);
 
-        // 5. Celebration Bounces for teammates
+        // 5. Stadium Grandstand Crowd Celebration Wave (v0.7.3)
+        this.celebrateCrowd(1600 / speed);
+
+        // 6. Celebration Bounces for teammates
         const scoringTeam = isHomeScored ? 'home' : 'away';
         for (const p of this.players) {
           if (p.team === scoringTeam) {
@@ -1668,7 +1934,7 @@ export class MatchScene extends Phaser.Scene {
           }
         }
 
-        // 6. Hold celebration then reset for kickoff
+        // 7. Hold celebration then reset for kickoff
         this.time.delayedCall(1500 / speed, () => {
           this.hideGoalBanner();
           // Reset ball to center for subsequent play
@@ -1922,6 +2188,7 @@ export class MatchScene extends Phaser.Scene {
       ballY: targetBallY,
       attackingTeam,
       isShootingPhase,
+      isSecondHalf: this.isSecondHalf,
       pitchBounds: {
         left: PITCH_LEFT,
         right: PITCH_RIGHT,
@@ -1974,12 +2241,16 @@ export class MatchScene extends Phaser.Scene {
             if (!p.isGK && state !== 'SLIDING') {
               const frameKey = Math.floor(stepCount / 3) % 2 === 0 ? '_run1' : '_run2';
               p.sprite.setTexture(`${p.texturePrefix}${frameKey}`);
+              // Dynamic vertical bobbing (badan naik turun) semasa larian (v0.7.3)
+              const bobY = Math.floor(stepCount / 3) % 2 === 0 ? -1.5 : 0.5;
+              p.sprite.setY(bobY);
             }
           },
           onComplete: () => {
             p.isMoving = false;
             p.sprite.setTexture(`${p.texturePrefix}_stand`);
             p.sprite.setAngle(0);
+            p.sprite.setY(0);
           },
         });
         this.activeTweens.push(moveTween);
@@ -2137,6 +2408,10 @@ export class MatchScene extends Phaser.Scene {
     if (this.ambientTimer) {
       this.ambientTimer.destroy();
       this.ambientTimer = null;
+    }
+    if (this.crowdTimer) {
+      this.crowdTimer.destroy();
+      this.crowdTimer = null;
     }
     if (this.weatherTimer) {
       this.weatherTimer.destroy();

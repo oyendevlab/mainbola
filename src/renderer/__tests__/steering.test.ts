@@ -201,4 +201,64 @@ describe('AI Tactical Steering (aiSteering.ts)', () => {
     expect(res.targetX).toBeLessThanOrEqual(dummyPitchBounds.right - 8);
     expect(res.targetY).toBeLessThanOrEqual(dummyPitchBounds.bottom - 8);
   });
+
+  it('reverses attacking direction and tactical runs in the second half', () => {
+    // In second half, Home attacks left (towards X=24)
+    const context2ndHalf: TacticalContext = {
+      ballX: 180,
+      ballY: 135,
+      attackingTeam: 'home',
+      isShootingPhase: false,
+      isSecondHalf: true,
+      pitchBounds: dummyPitchBounds,
+    };
+
+    const homeStrikerIn2ndHalf: TacticalPlayerInput = {
+      id: 'h_st2',
+      team: 'home',
+      role: 'ATT',
+      isGK: false,
+      baseX: 200, // Defending right side, attacking left
+      baseY: 135,
+      currentX: 200,
+      currentY: 135,
+    };
+
+    const res = computeTeamTacticalTarget(homeStrikerIn2ndHalf, [homeStrikerIn2ndHalf], context2ndHalf);
+    expect(res.state).toBe('MAKING_RUN');
+    // Target should push towards the left (negative X from base)
+    expect(res.targetX).toBeLessThan(homeStrikerIn2ndHalf.baseX);
+
+    // Offside line in 2nd half for Home attacking left
+    const defenders = samplePlayers.filter((p) => p.team === 'away');
+    const offside2ndHalf = calculateOffsideLine(defenders, 'home', true);
+    expect(offside2ndHalf).toBe(400); // Away defenders furthest left
+  });
+
+  it('advances team progressively as ball progresses upfield', () => {
+    const contextDeep: TacticalContext = {
+      ballX: 80, // deep in own half
+      ballY: 135,
+      attackingTeam: 'home',
+      isShootingPhase: false,
+      isSecondHalf: false,
+      pitchBounds: dummyPitchBounds,
+    };
+
+    const contextAdvanced: TacticalContext = {
+      ballX: 400, // deep in opponent third
+      ballY: 135,
+      attackingTeam: 'home',
+      isShootingPhase: false,
+      isSecondHalf: false,
+      pitchBounds: dummyPitchBounds,
+    };
+
+    const midfielder = samplePlayers.find((p) => p.id === 'h_cb')!; // testing outfield push
+    const resDeep = computeTeamTacticalTarget(midfielder, samplePlayers, contextDeep);
+    const resAdvanced = computeTeamTacticalTarget(midfielder, samplePlayers, contextAdvanced);
+
+    // As ball advances, progressive push should push defender/midfielder further upfield
+    expect(resAdvanced.targetX).toBeGreaterThan(resDeep.targetX);
+  });
 });
