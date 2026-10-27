@@ -99,8 +99,13 @@ export interface Club {
 export type MatchEventType =
   | 'KICKOFF'
   | 'PASS'
+  | 'ONE_TWO'
   | 'TACKLE'
   | 'INTERCEPTION'
+  | 'SHOT_BLOCK'
+  | 'FOUL'
+  | 'PENALTY'
+  | 'CORNER'
   | 'SHOT'
   | 'SAVE'
   | 'GOAL'

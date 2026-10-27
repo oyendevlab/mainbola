@@ -243,15 +243,21 @@ export function computeTeamTacticalTarget(
       targetY = player.baseY + lateralShift;
       state = 'RUNNING';
     } else {
-      // DEF: Pushing up progressively to squeeze pitch space
-      let pushX = forwardDir * (10 + ballProgress * 20);
+      // DEF: High defensive line pushing up to halfway line during attacks
+      // When attacking deep (ballProgress > 0.4), defense squeezes opponent into their half
+      const halfwayX = (left + right) / 2;
+      const maxDefPush = Math.abs(halfwayX - player.baseX) - 15;
+      let pushX = forwardDir * Math.min(maxDefPush, 16 + ballProgress * 42);
+
       // Overlapping run for fullbacks on active flank
       if (flankDist > 42 && isBallOnSameFlank && ballProgress > 0.4) {
-        pushX += forwardDir * 22;
+        pushX += forwardDir * 28;
         state = 'MAKING_RUN';
+      } else {
+        state = ballProgress > 0.6 ? 'RUNNING' : 'JOGGING';
       }
       targetX = player.baseX + pushX;
-      targetY = player.baseY + (ballY - player.baseY) * 0.18;
+      targetY = player.baseY + (ballY - player.baseY) * 0.22;
     }
   } else {
     // ==========================================

@@ -125,6 +125,35 @@ const PASS_TEMPLATES = [
   '{player} slips an incisive pass through the defensive line to {secondary}.',
 ];
 
+const ONE_TWO_TEMPLATES = [
+  'Brilliant one-two between {player} and {secondary} cuts through the backline!',
+  '{player} executes a slick give-and-go with {secondary} into open space!',
+  'Rapid exchange! {player} flicks to {secondary} and dashes forward to receive the return pass!',
+];
+
+const SHOT_BLOCK_TEMPLATES = [
+  'HEROIC BLOCK! {secondary} throws their body on the line to deny {player}\'s goalbound shot!',
+  '{secondary} makes a brave diving block in the box to deflect {player}\'s fierce drive!',
+  'Last-ditch block by {secondary} smothers the goalbound effort from {player}!',
+];
+
+const FOUL_TEMPLATES = [
+  'FOUL! {secondary} mistimes the sliding challenge and trips {player}.',
+  'The referee blows the whistle as {secondary} impedes {player}.',
+  '{secondary} is penalized for an aggressive tackle on {player}.',
+];
+
+const PENALTY_TEMPLATES = [
+  'PENALTY! {secondary} lunges in recklessly and brings down {player} inside the penalty box!',
+  'DRAMA! The referee points straight to the spot after {secondary} fouls {player} in the area!',
+];
+
+const CORNER_TEMPLATES = [
+  '{player} whips a curling corner kick right into the crowded penalty box!',
+  '{player} lofts an outswinging corner kick towards the near post!',
+  '{player} swings a dangerous corner kick deep into the danger area!',
+];
+
 const TACKLE_TEMPLATES = [
   'Superb sliding tackle by {secondary} to dispossess {player}!',
   '{secondary} times the challenge to perfection, stopping the counter-attack.',
@@ -274,10 +303,13 @@ export function simulateMatch(
     advanceTime(20, 65);
     const { minute, second } = getMinuteSecond();
 
-    // Direction of attack (in half 1: home attacks towards y=5, away towards y=95; half 2 swapped)
-    const attackDir = half === 1 ? (isHome ? -1 : 1) : (isHome ? 1 : -1);
-    const baseAttackY = attackDir < 0 ? 30 : 70;
-    const goalY = attackDir < 0 ? 4 : 96;
+    // Direction of attack along horizontal pitch (v0.7.5: Half 1: Home attacks right -> X=100, Away attacks left -> X=0; swapped in Half 2)
+    const attackDirX = half === 1 ? (isHome ? 1 : -1) : (isHome ? -1 : 1);
+    const targetGoalX = attackDirX > 0 ? 99 : 1;
+    const targetGoalY = 50;
+
+    // Penalty box zone in front of target goal
+    const penaltyBoxX = attackDirX > 0 ? prng.nextFloat(81, 92) : prng.nextFloat(8, 19);
 
     // Decision: Passing sequence vs Turnover/Tackle vs Shot
     // Passing sequence
@@ -297,29 +329,52 @@ export function simulateMatch(
       if (isHome) homePasses++;
       else awayPasses++;
 
-      const fromX = clampCoord(prng.nextFloat(25, 75));
-      const fromY = clampCoord(baseAttackY + (attackDir < 0 ? 20 : -20));
-      const toX = clampCoord(prng.nextFloat(20, 80));
-      const toY = clampCoord(baseAttackY);
+      const fromX = clampCoord(50 - attackDirX * prng.nextFloat(5, 25));
+      const fromY = clampCoord(prng.nextFloat(25, 75));
+      const toX = clampCoord(50 + attackDirX * prng.nextFloat(5, 30));
+      const toY = clampCoord(prng.nextFloat(20, 80));
 
-      const passTemplate = prng.pick(PASS_TEMPLATES);
-      const desc = passTemplate
-        .replace('{player}', passer.name)
-        .replace('{secondary}', receiver.name);
+      const isOneTwoOpportunity = prng.chance(0.22);
+      if (isOneTwoOpportunity) {
+        // --- ONE-TWO Give-and-Go Combination ---
+        const oneTwoTemplate = prng.pick(ONE_TWO_TEMPLATES);
+        const oneTwoDesc = oneTwoTemplate
+          .replace('{player}', passer.name)
+          .replace('{secondary}', receiver.name);
 
-      pushEvent({
-        minute,
-        second,
-        type: 'PASS',
-        teamId: attackingClub.id,
-        playerId: passer.id,
-        playerName: passer.name,
-        secondaryPlayerId: receiver.id,
-        secondaryPlayerName: receiver.name,
-        description: desc,
-        fromCoords: { x: fromX, y: fromY },
-        toCoords: { x: toX, y: toY },
-      });
+        pushEvent({
+          minute,
+          second,
+          type: 'ONE_TWO',
+          teamId: attackingClub.id,
+          playerId: passer.id,
+          playerName: passer.name,
+          secondaryPlayerId: receiver.id,
+          secondaryPlayerName: receiver.name,
+          description: oneTwoDesc,
+          fromCoords: { x: fromX, y: fromY },
+          toCoords: { x: penaltyBoxX, y: clampCoord(prng.nextFloat(35, 65)) },
+        });
+      } else {
+        const passTemplate = prng.pick(PASS_TEMPLATES);
+        const desc = passTemplate
+          .replace('{player}', passer.name)
+          .replace('{secondary}', receiver.name);
+
+        pushEvent({
+          minute,
+          second,
+          type: 'PASS',
+          teamId: attackingClub.id,
+          playerId: passer.id,
+          playerName: passer.name,
+          secondaryPlayerId: receiver.id,
+          secondaryPlayerName: receiver.name,
+          description: desc,
+          fromCoords: { x: fromX, y: fromY },
+          toCoords: { x: toX, y: toY },
+        });
+      }
 
       // After a good pass in the attacking third, check for Shot Opportunity
       const shotChance =
@@ -336,16 +391,66 @@ export function simulateMatch(
         if (isHome) homeShots++;
         else awayShots++;
 
-        const shotX = clampCoord(prng.nextFloat(30, 70));
-        const shotY = clampCoord(baseAttackY + prng.nextFloat(-5, 5));
-        const targetX = clampCoord(prng.nextFloat(45, 55));
+        // Shot strictly originates near/inside penalty box (v0.7.5)
+        const shotX = clampCoord(penaltyBoxX);
+        const shotY = clampCoord(prng.nextFloat(32, 68));
+        const targetY = clampCoord(prng.nextFloat(46, 54));
 
         // Is shot on target?
         const onTargetProb =
           0.44 + (shooter.attributes.attack - 70) * 0.004;
 
         if (prng.chance(onTargetProb)) {
-          // Shot ON TARGET
+          // Defender Shot Block chance
+          const defBlockRoll = prng.next();
+          if (defBlockRoll < 0.16) {
+            // --- SHOT BLOCK (Blocked by defender before reaching goal target) ---
+            const defender = pickPlayerByPosition(defendingClub.startingXI, ['DEF'], prng);
+            const blockTemplate = prng.pick(SHOT_BLOCK_TEMPLATES);
+            const blockDesc = blockTemplate
+              .replace('{player}', shooter.name)
+              .replace('{secondary}', defender.name);
+
+            pushEvent({
+              minute: shotTime.minute,
+              second: shotTime.second,
+              type: 'SHOT_BLOCK',
+              teamId: defendingClub.id,
+              playerId: defender.id,
+              playerName: defender.name,
+              secondaryPlayerId: shooter.id,
+              secondaryPlayerName: shooter.name,
+              description: blockDesc,
+              fromCoords: { x: shotX, y: shotY },
+              toCoords: { x: targetGoalX > 50 ? targetGoalX - 4 : targetGoalX + 4, y: shotY },
+            });
+
+            // Block yields a Corner Kick for the attacking team
+            advanceTime(12, 25);
+            const cornerTime = getMinuteSecond();
+            const cornerTaker = pickPlayerByPosition(attackingClub.startingXI, ['MID', 'ATT'], prng);
+            const cornerCornerY = prng.chance(0.5) ? 4 : 96;
+            const cornerTemplate = prng.pick(CORNER_TEMPLATES);
+            const cornerDesc = cornerTemplate.replace('{player}', cornerTaker.name);
+
+            pushEvent({
+              minute: cornerTime.minute,
+              second: cornerTime.second,
+              type: 'CORNER',
+              teamId: attackingClub.id,
+              playerId: cornerTaker.id,
+              playerName: cornerTaker.name,
+              description: cornerDesc,
+              fromCoords: { x: targetGoalX, y: cornerCornerY },
+              toCoords: { x: targetGoalX > 50 ? targetGoalX - 10 : targetGoalX + 10, y: 50 },
+            });
+
+            // Attacking turnover after corner
+            attackingTeamId = defendingClub.id;
+            return;
+          }
+
+          // Shot ON TARGET (Goal or GK Save)
           if (isHome) homeShotsOnTarget++;
           else awayShotsOnTarget++;
 
@@ -377,7 +482,7 @@ export function simulateMatch(
               secondaryPlayerName: passer.name,
               description: `GOAL! ${goalDesc}`,
               fromCoords: { x: shotX, y: shotY },
-              toCoords: { x: targetX, y: goalY },
+              toCoords: { x: targetGoalX, y: targetY },
             });
 
             // Conceding team restarts play from kickoff
@@ -418,7 +523,7 @@ export function simulateMatch(
               secondaryPlayerName: shooter.name,
               description: saveDesc,
               fromCoords: { x: shotX, y: shotY },
-              toCoords: { x: targetX, y: goalY },
+              toCoords: { x: targetGoalX, y: targetY },
             });
 
             // Turnover to goalkeeper
@@ -439,7 +544,7 @@ export function simulateMatch(
             playerName: shooter.name,
             description: wideDesc,
             fromCoords: { x: shotX, y: shotY },
-            toCoords: { x: targetX > 50 ? 60 : 40, y: goalY },
+            toCoords: { x: targetGoalX, y: targetY > 50 ? 70 : 30 },
           });
 
           // Goal kick to defending team
@@ -448,63 +553,177 @@ export function simulateMatch(
         }
       }
     } else {
-      // Defensive intervention: TACKLE, INTERCEPTION, or TURNOVER
+      // Defensive intervention: TACKLE, INTERCEPTION, FOUL, or TURNOVER
       const defender = pickPlayerByPosition(defendingClub.startingXI, ['DEF', 'MID'], prng);
       const actionRoll = prng.next();
 
-      const defX = clampCoord(prng.nextFloat(20, 80));
-      const defY = clampCoord(baseAttackY);
+      const defX = clampCoord(50 + attackDirX * prng.nextFloat(5, 35));
+      const defY = clampCoord(prng.nextFloat(20, 80));
 
       if (actionRoll < 0.45) {
-        // TACKLE
-        if (isHome) awayTackles++;
-        else homeTackles++;
+        // TACKLE / FOUL / PENALTY
+        const isFoul = prng.next() < (0.24 + weatherEffects.foulBonus * 0.05);
 
-        const tackleTemplate = prng.pick(TACKLE_TEMPLATES);
-        const tackleDesc = tackleTemplate
-          .replace('{player}', passer.name)
-          .replace('{secondary}', defender.name);
+        // Check if foul occurred inside defending penalty box
+        const isInBox = attackDirX > 0 ? defX > 80 : defX < 20;
 
-        pushEvent({
-          minute,
-          second,
-          type: 'TACKLE',
-          teamId: defendingClub.id,
-          playerId: defender.id,
-          playerName: defender.name,
-          secondaryPlayerId: passer.id,
-          secondaryPlayerName: passer.name,
-          description: tackleDesc,
-          fromCoords: { x: defX, y: defY },
-          toCoords: { x: defX + prng.nextFloat(-5, 5), y: defY + prng.nextFloat(-5, 5) },
-        });
-
-        // Chance of foul resulting in YELLOW_CARD or RED_CARD
-        // Weather adjustment: wet slippery pitch increases tackle foul probability
-        const cardRoll = prng.next();
-        const foulThreshold = 0.14 + (weatherEffects.foulBonus * 0.05);
-        if (cardRoll < foulThreshold) {
-          const isRed = cardRoll < 0.02;
-          const cardType = isRed ? 'RED_CARD' : 'YELLOW_CARD';
-          const cardDesc = isRed
-            ? `RED CARD! ${defender.name} is sent off for a reckless, dangerous tackle on ${passer.name}!`
-            : `YELLOW CARD! ${defender.name} is booked for a cynical challenge on ${passer.name}.`;
-
-          advanceTime(1, 4);
-          const cardTime = getMinuteSecond();
+        if (isFoul && isInBox && prng.chance(0.35)) {
+          // --- PENALTY ---
+          const penTemplate = prng.pick(PENALTY_TEMPLATES);
+          const penDesc = penTemplate
+            .replace('{player}', passer.name)
+            .replace('{secondary}', defender.name);
 
           pushEvent({
-            minute: cardTime.minute,
-            second: cardTime.second,
-            type: cardType,
+            minute,
+            second,
+            type: 'PENALTY',
+            teamId: attackingClub.id,
+            playerId: passer.id,
+            playerName: passer.name,
+            secondaryPlayerId: defender.id,
+            secondaryPlayerName: defender.name,
+            description: penDesc,
+            fromCoords: { x: defX, y: defY },
+            toCoords: { x: attackDirX > 0 ? 88 : 12, y: 50 },
+          });
+
+          // Take penalty kick
+          advanceTime(20, 40);
+          const penShotTime = getMinuteSecond();
+          const taker = pickPlayerByPosition(attackingClub.startingXI, ['ATT'], prng);
+
+          if (isHome) homeShots++;
+          else awayShots++;
+          if (isHome) homeShotsOnTarget++;
+          else awayShotsOnTarget++;
+
+          // Penalty conversion ~78%
+          if (prng.chance(0.78)) {
+            // PENALTY GOAL
+            if (isHome) currentHomeScore++;
+            else currentAwayScore++;
+
+            pushEvent({
+              minute: penShotTime.minute,
+              second: penShotTime.second,
+              type: 'GOAL',
+              teamId: attackingClub.id,
+              playerId: taker.id,
+              playerName: taker.name,
+              description: `GOAL! ${taker.name} coolly converts the penalty into the bottom corner!`,
+              fromCoords: { x: attackDirX > 0 ? 88 : 12, y: 50 },
+              toCoords: { x: targetGoalX, y: targetGoalY },
+            });
+
+            advanceTime(45, 60);
+            const restartTime = getMinuteSecond();
+            attackingTeamId = defendingClub.id;
+
+            pushEvent({
+              minute: restartTime.minute,
+              second: restartTime.second,
+              type: 'KICKOFF',
+              teamId: defendingClub.id,
+              playerId: pickPlayerByPosition(defendingClub.startingXI, ['ATT', 'MID'], prng).id,
+              playerName: pickPlayerByPosition(defendingClub.startingXI, ['ATT', 'MID'], prng).name,
+              description: `Play restarts with ${defendingClub.name} kicking off after the penalty goal.`,
+              fromCoords: { x: 50, y: 50 },
+              toCoords: { x: 52, y: 48 },
+            });
+            return;
+          } else {
+            // PENALTY SAVED
+            if (isHome) awaySaves++;
+            else homeSaves++;
+
+            pushEvent({
+              minute: penShotTime.minute,
+              second: penShotTime.second,
+              type: 'SAVE',
+              teamId: defendingClub.id,
+              playerId: defendingGK.id,
+              playerName: defendingGK.name,
+              secondaryPlayerId: taker.id,
+              secondaryPlayerName: taker.name,
+              description: `PENALTY SAVED! ${defendingGK.name} guesses correctly and pulls off a miraculous penalty save against ${taker.name}!`,
+              fromCoords: { x: attackDirX > 0 ? 88 : 12, y: 50 },
+              toCoords: { x: targetGoalX, y: targetGoalY },
+            });
+
+            attackingTeamId = defendingClub.id;
+            return;
+          }
+        } else if (isFoul) {
+          // --- STANDARD FOUL ---
+          const foulTemplate = prng.pick(FOUL_TEMPLATES);
+          const foulDesc = foulTemplate
+            .replace('{player}', passer.name)
+            .replace('{secondary}', defender.name);
+
+          pushEvent({
+            minute,
+            second,
+            type: 'FOUL',
             teamId: defendingClub.id,
             playerId: defender.id,
             playerName: defender.name,
             secondaryPlayerId: passer.id,
             secondaryPlayerName: passer.name,
-            description: cardDesc,
+            description: foulDesc,
             fromCoords: { x: defX, y: defY },
             toCoords: { x: defX, y: defY },
+          });
+
+          // Chance of card
+          const cardRoll = prng.next();
+          const foulThreshold = 0.16 + (weatherEffects.foulBonus * 0.05);
+          if (cardRoll < foulThreshold) {
+            const isRed = cardRoll < 0.02;
+            const cardType = isRed ? 'RED_CARD' : 'YELLOW_CARD';
+            const cardDesc = isRed
+              ? `RED CARD! ${defender.name} is sent off for a reckless, dangerous tackle on ${passer.name}!`
+              : `YELLOW CARD! ${defender.name} is booked for a cynical challenge on ${passer.name}.`;
+
+            advanceTime(1, 4);
+            const cardTime = getMinuteSecond();
+
+            pushEvent({
+              minute: cardTime.minute,
+              second: cardTime.second,
+              type: cardType,
+              teamId: defendingClub.id,
+              playerId: defender.id,
+              playerName: defender.name,
+              secondaryPlayerId: passer.id,
+              secondaryPlayerName: passer.name,
+              description: cardDesc,
+              fromCoords: { x: defX, y: defY },
+              toCoords: { x: defX, y: defY },
+            });
+          }
+        } else {
+          // Clean TACKLE
+          if (isHome) awayTackles++;
+          else homeTackles++;
+
+          const tackleTemplate = prng.pick(TACKLE_TEMPLATES);
+          const tackleDesc = tackleTemplate
+            .replace('{player}', passer.name)
+            .replace('{secondary}', defender.name);
+
+          pushEvent({
+            minute,
+            second,
+            type: 'TACKLE',
+            teamId: defendingClub.id,
+            playerId: defender.id,
+            playerName: defender.name,
+            secondaryPlayerId: passer.id,
+            secondaryPlayerName: passer.name,
+            description: tackleDesc,
+            fromCoords: { x: defX, y: defY },
+            toCoords: { x: defX + prng.nextFloat(-5, 5), y: defY + prng.nextFloat(-5, 5) },
           });
         }
       } else if (actionRoll < 0.8) {

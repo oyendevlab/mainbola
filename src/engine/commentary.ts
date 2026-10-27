@@ -20,10 +20,20 @@ export function getSpokenCommentary(event: MatchEvent, language: 'ms' | 'en' = '
     switch (event.type) {
       case 'GOAL':
         return `Gol! Jaringan menarik oleh ${pName}! Skor ${event.homeScore} berbalas ${event.awayScore}.`;
+      case 'ONE_TWO':
+        return `Kombinasi satu-dua menarik oleh ${pName}! Ruang pertahanan ditembusi!`;
       case 'SHOT':
         return `Percubaan bahaya daripada ${pName}!`;
+      case 'SHOT_BLOCK':
+        return 'Pertahanan kental merebahkan badan menghadang bola!';
       case 'SAVE':
         return 'Tangkapan kemas penjaga gol menyelamatkan gawang!';
+      case 'FOUL':
+        return `Kekasaran berlaku! Pengadil meniup wisel menghentikan permainan.`;
+      case 'PENALTY':
+        return `Sepakan penalti diberikan! Peluang keemasan di hadapan gawang gol!`;
+      case 'CORNER':
+        return 'Sepakan sudut diambil, bola melambung ke dalam kotak penalti!';
       case 'TACKLE':
         return `Terjahan bersih berjaya mematikan serangan!`;
       case 'INTERCEPTION':

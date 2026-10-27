@@ -128,6 +128,14 @@ export class MatchScene extends Phaser.Scene {
   private ballX = HALFWAY_X;
   private ballY = CENTER_Y;
 
+  // Retro Referee on pitch (v0.7.5)
+  private refereeContainer?: Phaser.GameObjects.Container;
+  private refereeSprite?: Phaser.GameObjects.Sprite;
+  private refereeShadow?: Phaser.GameObjects.Sprite;
+  private refereeTargetX = HALFWAY_X;
+  private refereeTargetY = CENTER_Y + 20;
+  private isRefereeWhistling = false;
+
   // Active Tweens and Timers for clean teardown/pause
   private activeTweens: Phaser.Tweens.Tween[] = [];
   private nextEventTimer: Phaser.Time.TimerEvent | null = null;
@@ -186,6 +194,9 @@ export class MatchScene extends Phaser.Scene {
     // 5. Create ball and shadow
     this.setupBall();
 
+    // 5b. Create on-pitch retro Referee (v0.7.5)
+    this.setupReferee();
+
     // 6. Start ambient player breathing/idling
     this.startAmbientIdling();
 
@@ -208,11 +219,12 @@ export class MatchScene extends Phaser.Scene {
   override update(time: number, _delta: number): void {
     if (this.isPausedState || this.isFinished) return;
     this.updateContinuousPlayerJogging(time);
+    this.updateReferee(time);
   }
 
   /**
-   * Continuous smooth jogging engine for all 22 players (v0.7.4)
-   * Eliminates jerky frame-by-frame freezes; all players stay active and jogging.
+   * Continuous smooth jogging engine for all 22 players (v0.7.4 / v0.7.5)
+   * Retro arcade hopping gallop (Kunio-kun / Sensible Soccer style)
    */
   private updateContinuousPlayerJogging(time: number): void {
     for (let i = 0; i < this.players.length; i++) {
@@ -224,27 +236,73 @@ export class MatchScene extends Phaser.Scene {
 
       if (p.isMoving) {
         // Fast active jogging stride while repositioning
-        const strideCycle = Math.floor((time + p.jogPhase * 100) / 140);
+        const strideCycle = Math.floor((time + p.jogPhase * 100) / 130);
         const frameKey = strideCycle % 2 === 0 ? '_run1' : '_run2';
         p.sprite.setTexture(`${p.texturePrefix}${frameKey}`);
 
-        // Natural vertical running bounce
-        const bounceY = Math.sin((time / 65) + p.jogPhase) * 1.5;
-        p.sprite.setY(bounceY);
+        // Retro arcade hopping gallop bounce (v0.7.5)
+        const hopY = -Math.abs(Math.sin((time / 65) + p.jogPhase)) * 2.8;
+        p.sprite.setY(hopY);
+        // Shadow contracts when player is airborne
+        p.shadow.setScale(1 - Math.abs(Math.sin((time / 65) + p.jogPhase)) * 0.28, 0.9);
       } else {
         // Rhythmic in-place jogging / on-toes stance shifting
-        const strideCycle = Math.floor((time + p.jogPhase * 150) / 240);
+        const strideCycle = Math.floor((time + p.jogPhase * 150) / 220);
         const frameKey = strideCycle % 2 === 0 ? '_run1' : '_stand';
         p.sprite.setTexture(`${p.texturePrefix}${frameKey}`);
 
-        // Subtle stance vertical spring
-        const bounceY = Math.sin((time / 110) + p.jogPhase) * 0.9;
-        p.sprite.setY(bounceY);
+        // Subtle stance vertical spring hop
+        const hopY = -Math.abs(Math.sin((time / 110) + p.jogPhase)) * 1.2;
+        p.sprite.setY(hopY);
+        p.shadow.setScale(1 - Math.abs(Math.sin((time / 110) + p.jogPhase)) * 0.15, 0.95);
 
         // Body tilts slightly towards ball direction
         const faceDir = this.ballX > p.container.x ? 1.5 : -1.5;
         p.sprite.setAngle(faceDir);
       }
+    }
+  }
+
+  /**
+   * Updates on-pitch referee position, following ball play closely while staying clear (v0.7.5)
+   */
+  private updateReferee(time: number): void {
+    if (!this.refereeContainer || !this.refereeSprite || !this.refereeContainer.active) return;
+
+    if (this.isRefereeWhistling) {
+      this.refereeSprite.setTexture('referee_whistle');
+      return;
+    }
+
+    // Keep safe tactical distance from ball (38px behind or alongside)
+    const offsetX = this.ballX > HALFWAY_X ? -38 : 38;
+    const offsetY = this.ballY > CENTER_Y ? -24 : 24;
+    this.refereeTargetX = Math.max(PITCH_LEFT + 25, Math.min(PITCH_RIGHT - 25, this.ballX + offsetX));
+    this.refereeTargetY = Math.max(PITCH_TOP + 20, Math.min(PITCH_BOTTOM - 20, this.ballY + offsetY));
+
+    // Smooth lerp steering towards target
+    const dx = this.refereeTargetX - this.refereeContainer.x;
+    const dy = this.refereeTargetY - this.refereeContainer.y;
+    const dist = Math.sqrt(dx * dx + dy * dy);
+
+    if (dist > 3) {
+      this.refereeContainer.x += dx * 0.05;
+      this.refereeContainer.y += dy * 0.05;
+
+      const strideCycle = Math.floor(time / 130);
+      const frame = strideCycle % 2 === 0 ? 'referee_run1' : 'referee_run2';
+      this.refereeSprite.setTexture(frame);
+
+      // Hopping gallop for referee
+      const hopY = -Math.abs(Math.sin(time / 65)) * 2.5;
+      this.refereeSprite.setY(hopY);
+      this.refereeShadow?.setScale(1 - Math.abs(Math.sin(time / 65)) * 0.25, 0.9);
+      this.refereeSprite.setFlipX(dx < 0);
+    } else {
+      this.refereeSprite.setTexture('referee_stand');
+      const hopY = -Math.abs(Math.sin(time / 110)) * 1.0;
+      this.refereeSprite.setY(hopY);
+      this.refereeShadow?.setScale(0.95, 0.95);
     }
   }
 
@@ -575,6 +633,140 @@ export class MatchScene extends Phaser.Scene {
 
     // 8. Generate retro pixel grandstand spectators (v0.7.3)
     this.createCrowdTextures(this.homeTeam.primaryColor, awayPrimary);
+
+    // 9. Generate on-pitch Referee and Pixel Emote textures (v0.7.5)
+    this.createRefereeTextures();
+    this.createEmoteTextures();
+  }
+
+  /**
+   * Generates retro 16-bit referee textures (v0.7.5)
+   */
+  private createRefereeTextures(): void {
+    const poses: Array<'stand' | 'run1' | 'run2' | 'whistle'> = ['stand', 'run1', 'run2', 'whistle'];
+    const skinColor = '#F5CBA7';
+    const hairColor = '#1F2937';
+    const shirtColor = '#0F172A'; // Black referee kit
+    const stripeColor = '#F8FAFC'; // White collar/pinstripes
+    const shortsColor = '#0F172A';
+    const bootColor = '#020617';
+
+    for (const pose of poses) {
+      const canvas = this.textures.createCanvas(`referee_${pose}`, 16, 16);
+      if (!canvas) continue;
+      const ctx = canvas.context;
+      ctx.clearRect(0, 0, 16, 16);
+
+      // Head / Hair (4x4)
+      ctx.fillStyle = hairColor;
+      ctx.fillRect(6, 1, 4, 2);
+      ctx.fillStyle = skinColor;
+      ctx.fillRect(6, 3, 4, 3);
+      ctx.fillStyle = '#0F172A'; // Eyes
+      ctx.fillRect(8, 3, 1, 1);
+
+      // Whistle blowing pose
+      if (pose === 'whistle') {
+        ctx.fillStyle = '#E2E8F0'; // Silver whistle in mouth
+        ctx.fillRect(9, 4, 2, 1);
+        ctx.fillStyle = skinColor; // Raised arm holding whistle
+        ctx.fillRect(9, 6, 2, 2);
+      }
+
+      // Torso / Shirt (6x5)
+      ctx.fillStyle = shirtColor;
+      ctx.fillRect(5, 6, 6, 5);
+      // Referee white collar & vertical stripes
+      ctx.fillStyle = stripeColor;
+      ctx.fillRect(6, 6, 1, 4);
+      ctx.fillRect(8, 6, 1, 4);
+
+      // Arms
+      if (pose !== 'whistle') {
+        ctx.fillStyle = skinColor;
+        ctx.fillRect(4, 7, 1, 3);
+        ctx.fillRect(11, 7, 1, 3);
+      }
+
+      // Shorts (6x3)
+      ctx.fillStyle = shortsColor;
+      ctx.fillRect(5, 11, 6, 2);
+
+      // Legs & Boots
+      if (pose === 'stand' || pose === 'whistle') {
+        ctx.fillStyle = skinColor;
+        ctx.fillRect(6, 13, 1, 2);
+        ctx.fillRect(9, 13, 1, 2);
+        ctx.fillStyle = bootColor;
+        ctx.fillRect(6, 15, 2, 1);
+        ctx.fillRect(9, 15, 2, 1);
+      } else if (pose === 'run1') {
+        ctx.fillStyle = skinColor;
+        ctx.fillRect(5, 13, 2, 2);
+        ctx.fillRect(9, 13, 1, 1);
+        ctx.fillStyle = bootColor;
+        ctx.fillRect(4, 15, 2, 1);
+        ctx.fillRect(10, 14, 2, 1);
+      } else if (pose === 'run2') {
+        ctx.fillStyle = skinColor;
+        ctx.fillRect(6, 13, 1, 1);
+        ctx.fillRect(9, 13, 2, 2);
+        ctx.fillStyle = bootColor;
+        ctx.fillRect(5, 14, 2, 1);
+        ctx.fillRect(10, 15, 2, 1);
+      }
+
+      canvas.refresh();
+    }
+  }
+
+  /**
+   * Generates retro floating pixel emotes: sweat, alert, foul (v0.7.5)
+   */
+  private createEmoteTextures(): void {
+    // 1. Sweat Emote (8x8)
+    const sweatCanvas = this.textures.createCanvas('emote_sweat', 8, 8);
+    if (sweatCanvas) {
+      const ctx = sweatCanvas.context;
+      ctx.clearRect(0, 0, 8, 8);
+      ctx.fillStyle = '#38BDF8';
+      ctx.fillRect(4, 1, 2, 1);
+      ctx.fillRect(3, 2, 4, 3);
+      ctx.fillRect(4, 5, 2, 1);
+      ctx.fillStyle = '#BAE6FD'; // Highlight
+      ctx.fillRect(4, 2, 1, 2);
+      sweatCanvas.refresh();
+    }
+
+    // 2. Alert Emote '!' (8x8)
+    const alertCanvas = this.textures.createCanvas('emote_alert', 8, 8);
+    if (alertCanvas) {
+      const ctx = alertCanvas.context;
+      ctx.clearRect(0, 0, 8, 8);
+      ctx.fillStyle = '#EF4444'; // Red exclamation
+      ctx.fillRect(3, 0, 2, 4);
+      ctx.fillRect(3, 5, 2, 2);
+      ctx.fillStyle = '#FCA5A5'; // Inner highlight
+      ctx.fillRect(3, 1, 1, 2);
+      alertCanvas.refresh();
+    }
+
+    // 3. Foul Emote '💢' (8x8)
+    const foulCanvas = this.textures.createCanvas('emote_foul', 8, 8);
+    if (foulCanvas) {
+      const ctx = foulCanvas.context;
+      ctx.clearRect(0, 0, 8, 8);
+      ctx.fillStyle = '#DC2626';
+      ctx.fillRect(1, 1, 2, 1);
+      ctx.fillRect(5, 1, 2, 1);
+      ctx.fillRect(2, 2, 4, 1);
+      ctx.fillRect(1, 3, 2, 2);
+      ctx.fillRect(5, 3, 2, 2);
+      ctx.fillRect(2, 5, 4, 1);
+      ctx.fillRect(1, 6, 2, 1);
+      ctx.fillRect(5, 6, 2, 1);
+      foulCanvas.refresh();
+    }
   }
 
   /**
@@ -1482,6 +1674,51 @@ export class MatchScene extends Phaser.Scene {
   }
 
   /**
+   * Sets up retro referee on the pitch (v0.7.5)
+   */
+  private setupReferee(): void {
+    if (this.refereeContainer) {
+      this.refereeContainer.destroy();
+    }
+
+    this.refereeTargetX = HALFWAY_X;
+    this.refereeTargetY = CENTER_Y + 22;
+
+    this.refereeContainer = this.add.container(this.refereeTargetX, this.refereeTargetY);
+    this.refereeContainer.setDepth(15);
+
+    this.refereeShadow = this.add.sprite(0, 7, 'player_shadow');
+    this.refereeShadow.setOrigin(0.5, 0.5);
+
+    this.refereeSprite = this.add.sprite(0, 0, 'referee_stand');
+    this.refereeSprite.setOrigin(0.5, 0.5);
+
+    this.refereeContainer.add([this.refereeShadow, this.refereeSprite]);
+  }
+
+  /**
+   * Shows a floating retro pixel emote above player/coordinates (v0.7.5)
+   */
+  public showPlayerEmote(x: number, y: number, key: 'emote_sweat' | 'emote_alert' | 'emote_foul'): void {
+    const emote = this.add.sprite(x, y - 14, key);
+    emote.setDepth(50);
+    emote.setScale(1.2);
+
+    this.tweens.add({
+      targets: emote,
+      y: y - 24,
+      scaleX: 1.4,
+      scaleY: 1.4,
+      alpha: 0,
+      duration: 550 / this.speedMultiplier,
+      ease: 'Back.easeOut',
+      onComplete: () => {
+        emote.destroy();
+      },
+    });
+  }
+
+  /**
    * Builds the retro 16-bit arcade HUD overlay:
    * - Top scoreboard and clock
    * - Bottom event commentary ticker
@@ -1687,6 +1924,11 @@ export class MatchScene extends Phaser.Scene {
         this.animatePass(event, isHome, speed, onComplete);
         break;
       }
+      case 'ONE_TWO': {
+        playKick(false);
+        this.animateOneTwo(event, isHome, speed, onComplete);
+        break;
+      }
       case 'SHOT': {
         playKick(true);
         this.animateShot(event, isHome, false, speed, onComplete);
@@ -1695,6 +1937,11 @@ export class MatchScene extends Phaser.Scene {
       case 'SAVE': {
         playKick(true);
         this.animateShot(event, !isHome, true, speed, onComplete);
+        break;
+      }
+      case 'SHOT_BLOCK': {
+        playTackle();
+        this.animateShotBlock(event, isHome, speed, onComplete);
         break;
       }
       case 'GOAL': {
@@ -1707,6 +1954,21 @@ export class MatchScene extends Phaser.Scene {
       case 'TURNOVER': {
         playTackle();
         this.animateTackle(event, isHome, event.type, speed, onComplete);
+        break;
+      }
+      case 'FOUL': {
+        playWhistle('kickoff');
+        this.animateFoul(event, speed, onComplete);
+        break;
+      }
+      case 'PENALTY': {
+        playWhistle('kickoff');
+        this.animatePenalty(event, isHome, speed, onComplete);
+        break;
+      }
+      case 'CORNER': {
+        playKick(true);
+        this.animateCorner(event, isHome, speed, onComplete);
         break;
       }
       case 'HALFTIME': {
@@ -1724,6 +1986,12 @@ export class MatchScene extends Phaser.Scene {
       case 'FULLTIME': {
         playWhistle('fulltime');
         this.animateWhistle('FULL TIME', 1500 / speed, onComplete);
+        break;
+      }
+      case 'YELLOW_CARD':
+      case 'RED_CARD': {
+        playWhistle('kickoff');
+        this.animateCard(event, speed, onComplete);
         break;
       }
       default: {
@@ -1898,6 +2166,10 @@ export class MatchScene extends Phaser.Scene {
   /**
    * SHOT / SAVE Animation: Shooter strikes directly from ball position (v0.7.4)
    */
+  /**
+   * Realistic penalty box shot execution (v0.7.5)
+   * Shooters advance into the box/final third rather than shooting from midfield.
+   */
   private animateShot(
     event: MatchEvent,
     isHomeShooting: boolean,
@@ -1905,7 +2177,6 @@ export class MatchScene extends Phaser.Scene {
     speed: number,
     onComplete: () => void
   ): void {
-    const duration = Math.max(100, 500 / speed);
     const shootingTeam = isHomeShooting ? 'home' : 'away';
 
     // 1. Identify Shooter
@@ -1916,108 +2187,149 @@ export class MatchScene extends Phaser.Scene {
       shooter = this.players.find((p) => p.team === shootingTeam && p.role === 'ATT') || this.players[0];
     }
 
-    const fromX = shooter.container.x;
-    const fromY = shooter.container.y + 4;
-    this.ballX = fromX;
-    this.ballY = fromY;
-    this.ballSprite.setPosition(fromX, fromY);
-    this.ballShadow.setPosition(fromX, fromY + 3);
-
     // Target goal line coordinates (swapped in 2nd half, v0.7.3)
     const homeGoalTarget = this.isSecondHalf ? PITCH_LEFT : PITCH_RIGHT;
     const awayGoalTarget = this.isSecondHalf ? PITCH_RIGHT : PITCH_LEFT;
     const targetGoalX = isHomeShooting ? homeGoalTarget : awayGoalTarget;
     const targetGoalY = CENTER_Y + Phaser.Math.Between(-14, 14);
+    const isShootingRight = targetGoalX > HALFWAY_X;
 
-    // Dynamic Team Formations: attacking team crashes box, defending team packs box
-    this.updateTacticalFormations(
-      targetGoalX,
-      targetGoalY,
-      shootingTeam,
-      duration,
-      true
-    );
+    // Realistic penalty box shooting entry coordinates (v0.7.5)
+    // Box bounds: Right goal box is ~380-425, Left goal box is ~55-100
+    const penBoxX = isShootingRight
+      ? Phaser.Math.Between(382, 422)
+      : Phaser.Math.Between(58, 98);
+    const penBoxY = CENTER_Y + Phaser.Math.Between(-26, 26);
 
-    // Set shooter kicking sprite pose
-    shooter.isActionLocked = true;
-    shooter.sprite.setTexture(`${shooter.texturePrefix}_kick`);
-    this.time.delayedCall(300 / speed, () => {
-      shooter.isActionLocked = false;
-    });
+    const executeShotRelease = () => {
+      const duration = Math.max(90, 440 / speed);
 
-    // Trigger crowd excitement
-    this.celebrateCrowd(600 / speed);
+      // Dynamic Team Formations: attacking team crashes box, defending team packs box
+      this.updateTacticalFormations(
+        targetGoalX,
+        targetGoalY,
+        shootingTeam,
+        duration,
+        true
+      );
 
-    // Find defending goalkeeper
-    const defendingTeam = isHomeShooting ? 'away' : 'home';
-    const gk = this.players.find((p) => p.team === defendingTeam && p.isGK);
+      // Set shooter kicking sprite pose
+      shooter.isActionLocked = true;
+      shooter.sprite.setTexture(`${shooter.texturePrefix}_kick`);
+      this.showPlayerEmote(shooter.container.x, shooter.container.y, 'emote_alert');
+      this.time.delayedCall(280 / speed, () => {
+        shooter.isActionLocked = false;
+      });
 
-    if (gk) {
-      gk.isActionLocked = true;
-      gk.sprite.setTexture(`${gk.texturePrefix}_dive`);
-      const diveY = isSaved ? targetGoalY : targetGoalY + (targetGoalY > CENTER_Y ? -8 : 8);
-      const isShootingRight = targetGoalX > HALFWAY_X;
-      const tweenGk = this.tweens.add({
-        targets: gk.container,
-        y: diveY,
-        angle: isShootingRight ? -20 : 20,
-        duration: duration * 0.85,
-        ease: 'Quad.easeOut',
-        yoyo: true,
-        hold: 200 / speed,
+      // Trigger crowd excitement
+      this.celebrateCrowd(600 / speed);
+
+      // Find defending goalkeeper
+      const defendingTeam = isHomeShooting ? 'away' : 'home';
+      const gk = this.players.find((p) => p.team === defendingTeam && p.isGK);
+
+      if (gk) {
+        gk.isActionLocked = true;
+        gk.sprite.setTexture(`${gk.texturePrefix}_dive`);
+        const diveY = isSaved ? targetGoalY : targetGoalY + (targetGoalY > CENTER_Y ? -8 : 8);
+        const tweenGk = this.tweens.add({
+          targets: gk.container,
+          y: diveY,
+          angle: isShootingRight ? -20 : 20,
+          duration: duration * 0.85,
+          ease: 'Quad.easeOut',
+          yoyo: true,
+          hold: 200 / speed,
+          onComplete: () => {
+            gk.isActionLocked = false;
+            gk.container.setAngle(0);
+          },
+        });
+        this.activeTweens.push(tweenGk);
+      }
+
+      // Fast Ball Tween with Swerve Curve (v0.7.5)
+      const endX = isSaved ? targetGoalX + (isShootingRight ? -12 : 12) : targetGoalX;
+      const endY = targetGoalY;
+      const startX = this.ballX;
+      const startY = this.ballY;
+      const swerveControlY = startY + (startY > CENTER_Y ? -18 : 18);
+
+      const tweenShot = this.tweens.addCounter({
+        from: 0,
+        to: 1,
+        duration,
+        ease: 'Quad.easeIn',
+        onUpdate: (tween) => {
+          const t = tween.getValue() ?? 0;
+          this.ballX = Phaser.Math.Linear(startX, endX, t);
+          this.ballY = Phaser.Math.Interpolation.QuadraticBezier(t, startY, swerveControlY, endY);
+          this.ballSprite.setPosition(this.ballX, this.ballY);
+          this.ballShadow.setPosition(this.ballX, this.ballY + 3);
+          if (Math.random() > 0.35) {
+            this.emitPixelTrail(this.ballX, this.ballY);
+          }
+        },
         onComplete: () => {
-          gk.isActionLocked = false;
-          gk.container.setAngle(0);
+          if (isSaved) {
+            this.showFloatingText('★ SAVED! ★', endX, endY - 14, '#38BDF8');
+            // Rebound ball slightly
+            const reboundX = endX + (isShootingRight ? -20 : 20);
+            const reboundY = endY + Phaser.Math.Between(-15, 15);
+            this.tweens.add({
+              targets: [this.ballSprite, this.ballShadow],
+              x: reboundX,
+              y: reboundY,
+              duration: 250 / speed,
+              ease: 'Sine.easeOut',
+              onComplete: () => {
+                this.currentCarrierId = gk?.id || null;
+                onComplete();
+              },
+            });
+          } else {
+            onComplete();
+          }
         },
       });
-      this.activeTweens.push(tweenGk);
+      this.activeTweens.push(tweenShot);
+    };
+
+    // If shooter is far from penalty box (>80px), dribble burst forward into the box first (v0.7.5)
+    const distToGoal = Math.abs(shooter.container.x - targetGoalX);
+    if (distToGoal > 80) {
+      const dribbleDuration = Math.max(120, 260 / speed);
+      shooter.isMoving = true;
+      this.tweens.add({
+        targets: shooter.container,
+        x: penBoxX,
+        y: penBoxY,
+        duration: dribbleDuration,
+        ease: 'Sine.easeOut',
+        onUpdate: () => {
+          this.ballX = shooter.container.x + (isShootingRight ? 5 : -5);
+          this.ballY = shooter.container.y + 4;
+          this.ballSprite.setPosition(this.ballX, this.ballY);
+          this.ballShadow.setPosition(this.ballX, this.ballY + 3);
+        },
+        onComplete: () => {
+          shooter.isMoving = false;
+          executeShotRelease();
+        },
+      });
+    } else {
+      const fromX = shooter.container.x;
+      const fromY = shooter.container.y + 4;
+      this.ballX = fromX;
+      this.ballY = fromY;
+      this.ballSprite.setPosition(fromX, fromY);
+      this.ballShadow.setPosition(fromX, fromY + 3);
+      executeShotRelease();
     }
-
-    // Fast Ball Tween
-    const endX = isSaved ? targetGoalX + (targetGoalX > HALFWAY_X ? -12 : 12) : targetGoalX;
-    const endY = targetGoalY;
-
-    const tweenShot = this.tweens.add({
-      targets: [this.ballSprite, this.ballShadow],
-      x: endX,
-      y: endY,
-      duration,
-      ease: 'Quad.easeIn',
-      onUpdate: () => {
-        this.ballX = this.ballSprite.x;
-        this.ballY = this.ballSprite.y;
-        this.ballShadow.setPosition(this.ballX, this.ballY + 3);
-        if (Math.random() > 0.4) {
-          this.emitPixelTrail(this.ballX, this.ballY);
-        }
-      },
-      onComplete: () => {
-        if (isSaved) {
-          this.showFloatingText('★ SAVED! ★', endX, endY - 14, '#38BDF8');
-          // Rebound ball slightly
-          const reboundX = endX + (targetGoalX > HALFWAY_X ? -20 : 20);
-          const reboundY = endY + Phaser.Math.Between(-15, 15);
-          this.tweens.add({
-            targets: [this.ballSprite, this.ballShadow],
-            x: reboundX,
-            y: reboundY,
-            duration: 250 / speed,
-            ease: 'Sine.easeOut',
-            onComplete: () => {
-              this.currentCarrierId = gk?.id || null;
-              onComplete();
-            },
-          });
-        } else {
-          onComplete();
-        }
-      },
-    });
-    this.activeTweens.push(tweenShot);
   }
 
   /**
-   * GOAL Animation
+   * GOAL Animation strictly executed in vicinity of penalty box (v0.7.5)
    */
   private animateGoal(
     event: MatchEvent,
@@ -2036,69 +2348,410 @@ export class MatchScene extends Phaser.Scene {
     let scorer = this.findPlayer(event.playerId, event.playerName, scoringTeam)
       || (this.currentCarrierId && this.players.find((p) => p.id === this.currentCarrierId && p.team === scoringTeam))
       || this.findNearestPlayer(this.ballX, this.ballY, scoringTeam);
+    if (!scorer) {
+      scorer = this.players.find((p) => p.team === scoringTeam && p.role === 'ATT') || this.players[0];
+    }
 
-    if (scorer) {
+    const penBoxX = isRightGoal
+      ? Phaser.Math.Between(386, 422)
+      : Phaser.Math.Between(58, 94);
+    const penBoxY = CENTER_Y + Phaser.Math.Between(-24, 24);
+
+    const executeGoalRelease = () => {
       scorer.isActionLocked = true;
       scorer.sprite.setTexture(`${scorer.texturePrefix}_kick`);
+      this.showPlayerEmote(scorer.container.x, scorer.container.y, 'emote_alert');
       this.time.delayedCall(300 / speed, () => {
         if (scorer) scorer.isActionLocked = false;
       });
+
+      // 1. Shoot into net from current ball position
+      const tweenGoalBall = this.tweens.add({
+        targets: [this.ballSprite, this.ballShadow],
+        x: netX,
+        y: netY,
+        duration: shotDuration,
+        ease: 'Quad.easeIn',
+        onUpdate: () => {
+          this.ballX = this.ballSprite.x;
+          this.ballY = this.ballSprite.y;
+          this.ballShadow.setPosition(this.ballX, this.ballY + 3);
+        },
+        onComplete: () => {
+          // 2. Shake Net and Screen
+          this.cameras.main.shake(180 / speed, 0.006);
+          this.shakeNet(isRightGoal);
+
+          // 3. Burst Confetti
+          this.burstConfetti(netX, netY);
+
+          // 4. Flash GOAL banner
+          const scorerName = event.playerName || (isHomeScored ? this.homeTeam.name : this.awayTeam.name);
+          this.showGoalBanner(scorerName, event.description);
+
+          // 5. Stadium Grandstand Crowd Celebration Wave (v0.7.3)
+          this.celebrateCrowd(1600 / speed);
+
+          // 6. Celebration Bounces for teammates
+          for (const p of this.players) {
+            if (p.team === scoringTeam) {
+              this.tweens.add({
+                targets: p.sprite,
+                y: -4,
+                yoyo: true,
+                repeat: 3,
+                duration: 150 / speed,
+              });
+            }
+          }
+
+          // 7. Hold celebration then reset for kickoff
+          this.time.delayedCall(1500 / speed, () => {
+            this.hideGoalBanner();
+            // Reset ball to center for subsequent play
+            this.ballX = HALFWAY_X;
+            this.ballY = CENTER_Y;
+            this.currentCarrierId = null;
+            this.ballSprite.setPosition(HALFWAY_X, CENTER_Y);
+            this.ballShadow.setPosition(HALFWAY_X, CENTER_Y + 3);
+            onComplete();
+          });
+        },
+      });
+      this.activeTweens.push(tweenGoalBall);
+    };
+
+    // If scorer is outside the penalty box, dribble into the box first (v0.7.5)
+    const distToNet = Math.abs(scorer.container.x - netX);
+    if (distToNet > 80) {
+      const dribbleDuration = Math.max(120, 260 / speed);
+      scorer.isMoving = true;
+      this.tweens.add({
+        targets: scorer.container,
+        x: penBoxX,
+        y: penBoxY,
+        duration: dribbleDuration,
+        ease: 'Sine.easeOut',
+        onUpdate: () => {
+          this.ballX = scorer.container.x + (isRightGoal ? 5 : -5);
+          this.ballY = scorer.container.y + 4;
+          this.ballSprite.setPosition(this.ballX, this.ballY);
+          this.ballShadow.setPosition(this.ballX, this.ballY + 3);
+        },
+        onComplete: () => {
+          scorer.isMoving = false;
+          executeGoalRelease();
+        },
+      });
+    } else {
+      const fromX = scorer.container.x;
+      const fromY = scorer.container.y + 4;
+      this.ballX = fromX;
+      this.ballY = fromY;
+      this.ballSprite.setPosition(fromX, fromY);
+      this.ballShadow.setPosition(fromX, fromY + 3);
+      executeGoalRelease();
+    }
+  }
+
+  /**
+   * Rapid One-Two Give-and-Go Combination (v0.7.5)
+   */
+  private animateOneTwo(
+    event: MatchEvent,
+    isHome: boolean,
+    speed: number,
+    onComplete: () => void
+  ): void {
+    const targetTeam = isHome ? 'home' : 'away';
+    const passer = this.findPlayer(event.playerId, event.playerName, targetTeam)
+      || this.findNearestPlayer(this.ballX, this.ballY, targetTeam);
+    if (!passer) {
+      this.animatePass(event, isHome, speed, onComplete);
+      return;
     }
 
-    // 1. Shoot into net from current ball position
-    const tweenGoalBall = this.tweens.add({
+    const receiver = this.findPassReceiver(passer, event.secondaryPlayerId, event.secondaryPlayerName);
+    const duration = Math.max(100, 320 / speed);
+
+    const isAttackingRight = !this.isSecondHalf ? isHome : !isHome;
+    const forwardX = isAttackingRight ? 35 : -35;
+    const returnTargetX = receiver.container.x + forwardX;
+    const returnTargetY = receiver.container.y + Phaser.Math.Between(-15, 15);
+
+    // 1. Initial pass to partner
+    passer.isActionLocked = true;
+    passer.sprite.setTexture(`${passer.texturePrefix}_kick`);
+    this.showPlayerEmote(passer.container.x, passer.container.y, 'emote_alert');
+
+    this.tweens.add({
       targets: [this.ballSprite, this.ballShadow],
-      x: netX,
-      y: netY,
-      duration: shotDuration,
-      ease: 'Quad.easeIn',
+      x: receiver.container.x,
+      y: receiver.container.y + 4,
+      duration,
+      ease: 'Sine.easeOut',
       onUpdate: () => {
         this.ballX = this.ballSprite.x;
         this.ballY = this.ballSprite.y;
-        this.ballShadow.setPosition(this.ballX, this.ballY + 3);
       },
       onComplete: () => {
-        // 2. Shake Net and Screen
-        this.cameras.main.shake(180 / speed, 0.006);
-        this.shakeNet(isRightGoal);
+        passer.isActionLocked = false;
 
-        // 3. Burst Confetti
-        this.burstConfetti(netX, netY);
+        // 2. Passer makes rapid run past defense
+        passer.isMoving = true;
+        this.tweens.add({
+          targets: passer.container,
+          x: returnTargetX,
+          y: returnTargetY,
+          duration: duration * 1.1,
+          ease: 'Sine.easeInOut',
+          onComplete: () => {
+            passer.isMoving = false;
+          },
+        });
 
-        // 4. Flash GOAL banner
-        const scorerName = event.playerName || (isHomeScored ? this.homeTeam.name : this.awayTeam.name);
-        this.showGoalBanner(scorerName, event.description);
+        // 3. Receiver executes first-time return pass
+        receiver.isActionLocked = true;
+        receiver.sprite.setTexture(`${receiver.texturePrefix}_kick`);
+        this.time.delayedCall(160 / speed, () => {
+          receiver.isActionLocked = false;
+        });
 
-        // 5. Stadium Grandstand Crowd Celebration Wave (v0.7.3)
-        this.celebrateCrowd(1600 / speed);
-
-        // 6. Celebration Bounces for teammates
-        for (const p of this.players) {
-          if (p.team === scoringTeam) {
-            this.tweens.add({
-              targets: p.sprite,
-              y: -4,
-              yoyo: true,
-              repeat: 3,
-              duration: 150 / speed,
-            });
-          }
-        }
-
-        // 7. Hold celebration then reset for kickoff
-        this.time.delayedCall(1500 / speed, () => {
-          this.hideGoalBanner();
-          // Reset ball to center for subsequent play
-          this.ballX = HALFWAY_X;
-          this.ballY = CENTER_Y;
-          this.currentCarrierId = null;
-          this.ballSprite.setPosition(HALFWAY_X, CENTER_Y);
-          this.ballShadow.setPosition(HALFWAY_X, CENTER_Y + 3);
-          onComplete();
+        this.tweens.add({
+          targets: [this.ballSprite, this.ballShadow],
+          x: returnTargetX,
+          y: returnTargetY + 4,
+          duration,
+          ease: 'Quad.easeOut',
+          onUpdate: () => {
+            this.ballX = this.ballSprite.x;
+            this.ballY = this.ballSprite.y;
+          },
+          onComplete: () => {
+            this.currentCarrierId = passer.id;
+            this.showFloatingText('★ 1-2 COMBINATION! ★', returnTargetX, returnTargetY - 14, '#FACC15');
+            onComplete();
+          },
         });
       },
     });
-    this.activeTweens.push(tweenGoalBall);
+  }
+
+  /**
+   * Defensive Shot Block in front of goal (v0.7.5)
+   */
+  private animateShotBlock(
+    event: MatchEvent,
+    isHomeShooting: boolean,
+    speed: number,
+    onComplete: () => void
+  ): void {
+    const defendingTeam = isHomeShooting ? 'away' : 'home';
+    const defender = this.findPlayer(event.playerId, event.playerName, defendingTeam)
+      || this.findNearestPlayer(this.ballX, this.ballY, defendingTeam);
+
+    const blockX = defender ? defender.container.x : this.ballX;
+    const blockY = defender ? defender.container.y : this.ballY;
+
+    if (defender) {
+      defender.isActionLocked = true;
+      defender.sprite.setTexture(`${defender.texturePrefix}_slide`);
+      this.time.delayedCall(350 / speed, () => {
+        defender.isActionLocked = false;
+      });
+    }
+
+    // Ball strikes defender and deflects outwards
+    this.tweens.add({
+      targets: [this.ballSprite, this.ballShadow],
+      x: blockX,
+      y: blockY + 4,
+      duration: Math.max(90, 240 / speed),
+      ease: 'Quad.easeIn',
+      onComplete: () => {
+        this.burstSparks(blockX, blockY);
+        this.burstTurfParticles(blockX, blockY);
+        this.showFloatingText('★ SHOT BLOCKED! ★', blockX, blockY - 14, '#F43F5E');
+        this.showPlayerEmote(blockX, blockY, 'emote_sweat');
+
+        // Deflect towards corner / sideline
+        const deflectX = blockX + (blockX > HALFWAY_X ? -25 : 25);
+        const deflectY = blockY > CENTER_Y ? PITCH_BOTTOM + 5 : PITCH_TOP - 5;
+
+        this.tweens.add({
+          targets: [this.ballSprite, this.ballShadow],
+          x: deflectX,
+          y: deflectY,
+          duration: Math.max(100, 320 / speed),
+          ease: 'Sine.easeOut',
+          onUpdate: () => {
+            this.ballX = this.ballSprite.x;
+            this.ballY = this.ballSprite.y;
+          },
+          onComplete: () => {
+            onComplete();
+          },
+        });
+      },
+    });
+  }
+
+  /**
+   * Referee Whistles Foul with slide tackle and emote (v0.7.5)
+   */
+  private animateFoul(
+    _event: MatchEvent,
+    speed: number,
+    onComplete: () => void
+  ): void {
+    const x = this.ballX;
+    const y = this.ballY;
+
+    this.burstSparks(x, y);
+    this.burstTurfParticles(x, y);
+    this.showFloatingText('★ FOUL! ★', x, y - 12, '#F59E0B');
+    this.showPlayerEmote(x, y, 'emote_foul');
+
+    // Referee blows whistle
+    this.isRefereeWhistling = true;
+    if (this.refereeContainer) {
+      this.refereeContainer.setPosition(x + (x > HALFWAY_X ? -28 : 28), y + 10);
+    }
+
+    this.time.delayedCall(600 / speed, () => {
+      this.isRefereeWhistling = false;
+      onComplete();
+    });
+  }
+
+  /**
+   * Penalty Kick Animation (v0.7.5)
+   */
+  private animatePenalty(
+    event: MatchEvent,
+    isHomeAttacking: boolean,
+    speed: number,
+    onComplete: () => void
+  ): void {
+    const isAttackingRight = !this.isSecondHalf ? isHomeAttacking : !isHomeAttacking;
+    const spotX = isAttackingRight ? PITCH_RIGHT - 46 : PITCH_LEFT + 46;
+    const spotY = CENTER_Y;
+
+    this.showFloatingText('★ PENALTY AWARDED! ★', HALFWAY_X, CENTER_Y - 20, '#EF4444');
+    this.showGoalBanner('PENALTY!', event.description);
+
+    this.isRefereeWhistling = true;
+    if (this.refereeContainer) {
+      this.refereeContainer.setPosition(spotX + (isAttackingRight ? -30 : 30), spotY - 20);
+    }
+
+    // Set ball at penalty spot
+    this.ballX = spotX;
+    this.ballY = spotY;
+    this.ballSprite.setPosition(spotX, spotY);
+    this.ballShadow.setPosition(spotX, spotY + 3);
+
+    const attackingTeam = isHomeAttacking ? 'home' : 'away';
+    const taker = this.findPlayer(event.playerId, event.playerName, attackingTeam)
+      || this.players.find((p) => p.team === attackingTeam && p.role === 'ATT')
+      || this.players[0];
+
+    if (taker) {
+      taker.container.setPosition(spotX + (isAttackingRight ? -14 : 14), spotY);
+    }
+
+    this.time.delayedCall(1000 / speed, () => {
+      this.isRefereeWhistling = false;
+      this.hideGoalBanner();
+      onComplete();
+    });
+  }
+
+  /**
+   * Corner Kick Animation (v0.7.5)
+   */
+  private animateCorner(
+    event: MatchEvent,
+    isHomeAttacking: boolean,
+    speed: number,
+    onComplete: () => void
+  ): void {
+    const isAttackingRight = !this.isSecondHalf ? isHomeAttacking : !isHomeAttacking;
+    const cornerFlagX = isAttackingRight ? PITCH_RIGHT : PITCH_LEFT;
+    const cornerFlagY = event.fromCoords?.y && event.fromCoords.y > 50 ? PITCH_BOTTOM : PITCH_TOP;
+
+    this.ballX = cornerFlagX;
+    this.ballY = cornerFlagY;
+    this.ballSprite.setPosition(cornerFlagX, cornerFlagY);
+    this.ballShadow.setPosition(cornerFlagX, cornerFlagY + 3);
+
+    this.showFloatingText('CORNER KICK', cornerFlagX + (isAttackingRight ? -25 : 25), cornerFlagY > CENTER_Y ? cornerFlagY - 15 : cornerFlagY + 15, '#38BDF8');
+
+    const attackingTeam = isHomeAttacking ? 'home' : 'away';
+    const taker = this.findPlayer(event.playerId, event.playerName, attackingTeam)
+      || this.findNearestPlayer(cornerFlagX, cornerFlagY, attackingTeam);
+    if (taker) {
+      taker.container.setPosition(cornerFlagX + (isAttackingRight ? -8 : 8), cornerFlagY);
+      taker.isActionLocked = true;
+      taker.sprite.setTexture(`${taker.texturePrefix}_kick`);
+      this.time.delayedCall(280 / speed, () => {
+        taker.isActionLocked = false;
+      });
+    }
+
+    // Swerve high-arching cross into danger box
+    const targetBoxX = isAttackingRight ? PITCH_RIGHT - 45 : PITCH_LEFT + 45;
+    const targetBoxY = CENTER_Y + Phaser.Math.Between(-15, 15);
+    const duration = Math.max(120, 500 / speed);
+
+    const tweenCross = this.tweens.addCounter({
+      from: 0,
+      to: 1,
+      duration,
+      ease: 'Quad.easeOut',
+      onUpdate: (tween) => {
+        const t = tween.getValue() ?? 0;
+        this.ballX = Phaser.Math.Linear(cornerFlagX, targetBoxX, t);
+        // High parabolic 3D arc
+        const heightArc = Math.sin(t * Math.PI) * 16;
+        this.ballY = Phaser.Math.Linear(cornerFlagY, targetBoxY, t) - heightArc;
+        this.ballSprite.setPosition(this.ballX, this.ballY);
+        this.ballSprite.setScale(1 + (heightArc / 20));
+        this.ballShadow.setPosition(this.ballX, Phaser.Math.Linear(cornerFlagY, targetBoxY, t) + 3);
+        this.ballShadow.setScale(Math.max(0.6, 1 - (heightArc / 25)));
+      },
+      onComplete: () => {
+        this.ballSprite.setScale(1);
+        this.ballShadow.setScale(1);
+        this.ballY = targetBoxY;
+        this.ballSprite.setPosition(targetBoxX, targetBoxY);
+        this.showPlayerEmote(targetBoxX, targetBoxY, 'emote_alert');
+        onComplete();
+      },
+    });
+    this.activeTweens.push(tweenCross);
+  }
+
+  /**
+   * Disciplinary Card booking animation (v0.7.5)
+   */
+  private animateCard(
+    event: MatchEvent,
+    speed: number,
+    onComplete: () => void
+  ): void {
+    const isRed = event.type === 'RED_CARD';
+    const cardColor = isRed ? '#DC2626' : '#FACC15';
+    const cardText = isRed ? '🟥 RED CARD!' : '🟨 YELLOW CARD';
+
+    this.showFloatingText(cardText, this.ballX, this.ballY - 18, cardColor);
+    this.showPlayerEmote(this.ballX, this.ballY, 'emote_foul');
+
+    this.isRefereeWhistling = true;
+    this.time.delayedCall(600 / speed, () => {
+      this.isRefereeWhistling = false;
+      onComplete();
+    });
   }
 
   /**
