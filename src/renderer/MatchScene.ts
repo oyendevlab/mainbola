@@ -8,6 +8,9 @@ export interface TeamVisualInfo {
   name: string;
   primaryColor: string;
   secondaryColor: string;
+  awayPrimaryColor?: string;
+  awaySecondaryColor?: string;
+  kitPattern?: 'solid' | 'stripes' | 'hoops' | 'half';
   formation: FormationType;
   startingXI?: Player[];
 }
@@ -24,6 +27,7 @@ export interface MatchSceneInitData {
   events: MatchEvent[];
   homeTeam?: Partial<TeamVisualInfo>;
   awayTeam?: Partial<TeamVisualInfo>;
+  weather?: 'Sunny' | 'Rainy' | 'Night';
   playbackSpeed?: 1 | 2 | 4;
   isPaused?: boolean;
   callbacks?: MatchSceneCallbacks;
@@ -80,6 +84,10 @@ export class MatchScene extends Phaser.Scene {
     formation: '4-3-3',
   };
 
+  private weather: 'Sunny' | 'Rainy' | 'Night' = 'Sunny';
+  private weatherGraphics?: Phaser.GameObjects.Graphics;
+  private weatherTimer?: Phaser.Time.TimerEvent;
+
   private callbacks: MatchSceneCallbacks = {};
 
   // Pitch & Game Objects
@@ -115,6 +123,7 @@ export class MatchScene extends Phaser.Scene {
     if (data.events) this.matchEvents = [...data.events];
     if (data.homeTeam) this.homeTeam = { ...this.homeTeam, ...data.homeTeam };
     if (data.awayTeam) this.awayTeam = { ...this.awayTeam, ...data.awayTeam };
+    if (data.weather) this.weather = data.weather;
     if (data.playbackSpeed) this.speedMultiplier = data.playbackSpeed;
     if (data.isPaused !== undefined) this.isPausedState = data.isPaused;
     if (data.callbacks) this.callbacks = { ...data.callbacks };
@@ -147,10 +156,109 @@ export class MatchScene extends Phaser.Scene {
     // 5. Start ambient player breathing/idling
     this.startAmbientIdling();
 
-    // 6. Begin event playback if events exist and not paused
+    // 6. Setup dynamic weather effects (rain particles or night lights)
+    this.setupWeatherEffects();
+
+    // 7. Begin event playback if events exist and not paused
     if (!this.isPausedState) {
       this.scheduleNextEvent(600);
     }
+  }
+
+  /**
+   * Configures visual weather ambiance (animated rain particles or floodlit night).
+   */
+  private setupWeatherEffects(): void {
+    if (this.weatherGraphics) {
+      this.weatherGraphics.destroy();
+      this.weatherGraphics = undefined;
+    }
+    if (this.weatherTimer) {
+      this.weatherTimer.destroy();
+      this.weatherTimer = undefined;
+    }
+
+    if (this.weather === 'Rainy') {
+      this.weatherGraphics = this.add.graphics();
+      this.weatherGraphics.setDepth(150);
+
+      const drops: Array<{ x: number; y: number; speed: number; len: number }> = [];
+      for (let i = 0; i < 45; i++) {
+        drops.push({
+          x: Phaser.Math.Between(0, 480),
+          y: Phaser.Math.Between(0, 270),
+          speed: Phaser.Math.Between(180, 280),
+          len: Phaser.Math.Between(4, 9),
+        });
+      }
+
+      this.weatherTimer = this.time.addEvent({
+        delay: 30,
+        loop: true,
+        callback: () => {
+          if (!this.weatherGraphics) return;
+          this.weatherGraphics.clear();
+          this.weatherGraphics.lineStyle(1, 0x93c5fd, 0.45);
+
+          for (const d of drops) {
+            d.y += d.speed * 0.03;
+            d.x -= d.speed * 0.008;
+            if (d.y > 270) {
+              d.y = 0;
+              d.x = Phaser.Math.Between(0, 480);
+            }
+            if (d.x < 0) d.x = 480;
+
+            this.weatherGraphics.lineBetween(d.x, d.y, d.x - 2, d.y + d.len);
+          }
+        },
+      });
+    } else if (this.weather === 'Night') {
+      this.weatherGraphics = this.add.graphics();
+      this.weatherGraphics.setDepth(150);
+
+      this.weatherGraphics.fillStyle(0x020617, 0.15);
+      this.weatherGraphics.fillRect(0, 0, 480, 270);
+
+      const lights = [
+        { x: PITCH_LEFT + 20, y: PITCH_TOP + 10 },
+        { x: PITCH_RIGHT - 20, y: PITCH_TOP + 10 },
+        { x: PITCH_LEFT + 20, y: PITCH_BOTTOM - 10 },
+        { x: PITCH_RIGHT - 20, y: PITCH_BOTTOM - 10 },
+      ];
+
+      for (const light of lights) {
+        this.weatherGraphics.fillStyle(0xfef08a, 0.06);
+        this.weatherGraphics.fillCircle(light.x, light.y, 45);
+        this.weatherGraphics.fillStyle(0xfef08a, 0.12);
+        this.weatherGraphics.fillCircle(light.x, light.y, 16);
+      }
+    }
+  }
+
+  /**
+   * Helper to compute Euclidean distance between two hex color codes.
+   */
+  private getColorDistance(colorA: string, colorB: string): number {
+    const parse = (hex: string) => {
+      let c = hex.replace('#', '');
+      if (c.length === 3) {
+        c = c.split('').map((x) => x + x).join('');
+      }
+      const num = parseInt(c, 16);
+      return {
+        r: (num >> 16) & 255,
+        g: (num >> 8) & 255,
+        b: num & 255,
+      };
+    };
+
+    const rgb1 = parse(colorA);
+    const rgb2 = parse(colorB);
+    const dr = rgb1.r - rgb2.r;
+    const dg = rgb1.g - rgb2.g;
+    const db = rgb1.b - rgb2.b;
+    return Math.sqrt(dr * dr + dg * dg + db * db);
   }
 
   /**
@@ -234,30 +342,47 @@ export class MatchScene extends Phaser.Scene {
       playerShadowCanvas.refresh();
     }
 
-    // 4. Player Sprites (16x16)
+    // 4. Kit clash check & Player Sprites (16x16)
+    // If home and away primary colors clash (distance < 80), switch away team to away kit
+    const colorDist = this.getColorDistance(
+      this.homeTeam.primaryColor,
+      this.awayTeam.primaryColor
+    );
+    const useAwayKit = colorDist < 80;
+    const awayPrimary = useAwayKit
+      ? this.awayTeam.awayPrimaryColor || '#FFFFFF'
+      : this.awayTeam.primaryColor;
+    const awaySecondary = useAwayKit
+      ? this.awayTeam.awaySecondaryColor || this.awayTeam.primaryColor
+      : this.awayTeam.secondaryColor;
+
     this.createPlayerTexture(
       'player_home',
       this.homeTeam.primaryColor,
       this.homeTeam.secondaryColor,
-      false
+      false,
+      this.homeTeam.kitPattern || 'solid'
     );
     this.createPlayerTexture(
       'player_home_gk',
       '#E4F123', // Bright Neon Yellow
       '#1E293B',
-      true
+      true,
+      'solid'
     );
     this.createPlayerTexture(
       'player_away',
-      this.awayTeam.primaryColor,
-      this.awayTeam.secondaryColor,
-      false
+      awayPrimary,
+      awaySecondary,
+      false,
+      this.awayTeam.kitPattern || 'solid'
     );
     this.createPlayerTexture(
       'player_away_gk',
       '#FF6B35', // Bright Neon Orange
       '#1E293B',
-      true
+      true,
+      'solid'
     );
 
     // 5. Spark Particle (2x2)
@@ -286,7 +411,8 @@ export class MatchScene extends Phaser.Scene {
     key: string,
     shirtColor: string,
     shortsColor: string,
-    isGK: boolean
+    isGK: boolean,
+    pattern: 'solid' | 'stripes' | 'hoops' | 'half' = 'solid'
   ): void {
     const canvas = this.textures.createCanvas(key, 16, 16);
     if (!canvas) return;
@@ -314,9 +440,25 @@ export class MatchScene extends Phaser.Scene {
     ctx.fillRect(6, 4, 1, 1);
     ctx.fillRect(9, 4, 1, 1);
 
-    // Torso / Shirt (Primary Color)
+    // Torso / Shirt (Primary Color & Patterns)
     ctx.fillStyle = shirtColor;
     ctx.fillRect(4, 5, 8, 5);
+
+    if (!isGK && pattern !== 'solid') {
+      ctx.fillStyle = shortsColor;
+      if (pattern === 'stripes') {
+        // Vertical stripes on torso (x: 5, 7, 9)
+        ctx.fillRect(5, 5, 2, 5);
+        ctx.fillRect(9, 5, 2, 5);
+      } else if (pattern === 'hoops') {
+        // Horizontal stripes/hoops on torso (y: 6, 8)
+        ctx.fillRect(4, 6, 8, 1);
+        ctx.fillRect(4, 8, 8, 1);
+      } else if (pattern === 'half') {
+        // Half / Half split on torso
+        ctx.fillRect(8, 5, 4, 5);
+      }
+    }
 
     // Collar / Accent Trim
     ctx.fillStyle = shortsColor;
@@ -363,13 +505,23 @@ export class MatchScene extends Phaser.Scene {
     this.pitchGraphics.setDepth(1);
 
     // Outer turf surround
-    this.pitchGraphics.fillStyle(0x1a4d2e, 1);
+    // Weather lighting: If Night, tint pitch outer turf darker
+    const outerColor = this.weather === 'Night' ? 0x0f2918 : 0x1a4d2e;
+    this.pitchGraphics.fillStyle(outerColor, 1);
     this.pitchGraphics.fillRect(0, 0, 480, 270);
 
     // Alternating grass stripes (12 vertical stripes)
     const stripeWidth = PITCH_WIDTH / 12; // 36px each
-    const pitchLight = 0x2d8a4e;
-    const pitchDark = 0x247541;
+    let pitchLight = 0x2d8a4e;
+    let pitchDark = 0x247541;
+
+    if (this.weather === 'Night') {
+      pitchLight = 0x1e6037;
+      pitchDark = 0x164c2a;
+    } else if (this.weather === 'Rainy') {
+      pitchLight = 0x257a44;
+      pitchDark = 0x1c6337;
+    }
 
     for (let i = 0; i < 12; i++) {
       const color = i % 2 === 0 ? pitchLight : pitchDark;
@@ -515,6 +667,9 @@ export class MatchScene extends Phaser.Scene {
 
     // Draw Goals & Nets
     this.drawGoalNets();
+
+    // Weather Effects
+    this.setupWeatherFX();
   }
 
   private drawCornerFlags(): void {
@@ -619,6 +774,83 @@ export class MatchScene extends Phaser.Scene {
       PITCH_RIGHT + goalDepth,
       goalBottom
     );
+  }
+
+  /**
+   * Procedural weather rendering:
+   * - Rainy: animated falling diagonal rain particles across pitch canvas
+   * - Night: floodlight lighting cones and ambient pitch glow
+   */
+  private setupWeatherFX(): void {
+    if (this.weatherGraphics) {
+      this.weatherGraphics.destroy();
+    }
+    if (this.weatherTimer) {
+      this.weatherTimer.destroy();
+    }
+
+    if (this.weather === 'Rainy') {
+      this.weatherGraphics = this.add.graphics();
+      this.weatherGraphics.setDepth(35); // Above pitch and players, below HUD (50)
+
+      // Animate 60 raindrops falling
+      const drops: Array<{ x: number; y: number; speed: number; len: number }> = [];
+      for (let i = 0; i < 60; i++) {
+        drops.push({
+          x: Math.random() * 480,
+          y: Math.random() * 270,
+          speed: 6 + Math.random() * 4,
+          len: 8 + Math.random() * 6,
+        });
+      }
+
+      this.weatherTimer = this.time.addEvent({
+        delay: 30,
+        loop: true,
+        callback: () => {
+          if (!this.weatherGraphics || !this.weatherGraphics.active) return;
+          this.weatherGraphics.clear();
+          this.weatherGraphics.lineStyle(1, 0xa5b4fc, 0.55);
+
+          for (const d of drops) {
+            this.weatherGraphics.lineBetween(d.x, d.y, d.x - 2, d.y + d.len);
+            d.y += d.speed;
+            d.x -= 1.5;
+            if (d.y > 270) {
+              d.y = -10;
+              d.x = Math.random() * 480;
+            }
+            if (d.x < 0) {
+              d.x = 480;
+            }
+          }
+        },
+      });
+    } else if (this.weather === 'Night') {
+      this.weatherGraphics = this.add.graphics();
+      this.weatherGraphics.setDepth(35);
+
+      // Night darkness overlay with floodlight circles
+      this.weatherGraphics.fillStyle(0x020617, 0.35);
+      this.weatherGraphics.fillRect(0, 0, 480, 270);
+
+      // Four stadium floodlights at corners casting warm/cool glow
+      const lights = [
+        { x: 30, y: 20 },
+        { x: 450, y: 20 },
+        { x: 30, y: 250 },
+        { x: 450, y: 250 },
+      ];
+
+      for (const light of lights) {
+        // Outer halo
+        this.weatherGraphics.fillStyle(0xfef08a, 0.08);
+        this.weatherGraphics.fillCircle(light.x, light.y, 110);
+        // Inner bright core
+        this.weatherGraphics.fillStyle(0xffffff, 0.18);
+        this.weatherGraphics.fillCircle(light.x, light.y, 45);
+      }
+    }
   }
 
   /**

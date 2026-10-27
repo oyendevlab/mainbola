@@ -43,6 +43,21 @@ test.describe('MainBola PWA Vertical Slice', () => {
     await page.getByRole('button', { name: 'Match', exact: true }).click();
     await expect(page.locator('text=Quick Match Simulator')).toBeVisible();
 
+    // Verify v0.6.0 Weather indicator, Press Conference, and PvP buttons
+    await expect(page.locator('text=Ramalan Cuaca Padang')).toBeVisible();
+    await expect(page.locator('text=Sidang Media Pra-Perlawanan')).toBeVisible();
+    await expect(page.locator('text=Cabaran PvP (Lawan Rakan)')).toBeVisible();
+
+    // Test Press Conference Modal
+    const pressBtn = page.getByRole('button', { name: 'Masuk' });
+    await expect(pressBtn).toBeVisible();
+    await pressBtn.click();
+    await expect(page.locator('text=Pilih Jawapan Pengurus:')).toBeVisible();
+    // Select first answer
+    await page.locator('button:has-text("Moral")').first().click();
+    await expect(page.locator('text=Kenyataan Diterbitkan:')).toBeVisible();
+    await page.locator('button:has-text("Kembali Ke Persediaan Perlawanan")').click();
+
     // Kick off Match Simulation
     const kickOffBtn = page.locator('button:has-text("Kick Off Match Simulation")');
     await kickOffBtn.click();
@@ -62,8 +77,9 @@ test.describe('MainBola PWA Vertical Slice', () => {
     // Open Stats Breakdown
     const statsBtn = page.locator('button:has-text("Stats")');
     await statsBtn.click();
-    await expect(page.locator('text=Match Statistics')).toBeVisible();
-    await expect(page.locator('text=Possession')).toBeVisible();
+    await expect(page.locator('text=Statistik Perlawanan')).toBeVisible();
+    await expect(page.locator('text=Penguasaan Bola')).toBeVisible();
+    await expect(page.locator('text=Pemain Terbaik Perlawanan (MOTM)')).toBeVisible();
 
     // Return Home
     await page.locator('button:has-text("Return Home")').click();

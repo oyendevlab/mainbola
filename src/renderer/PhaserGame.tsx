@@ -25,6 +25,7 @@ export interface PhaserGameProps {
   awayTeam?: Partial<TeamVisualInfo>;
   playbackSpeed?: 1 | 2 | 4;
   isPaused?: boolean;
+  weather?: 'Sunny' | 'Rainy' | 'Night';
   onTimeUpdate?: (minute: number) => void;
   onEvent?: (event: MatchEvent) => void;
   onScoreUpdate?: (homeScore: number, awayScore: number) => void;
@@ -42,6 +43,7 @@ export const PhaserGame = forwardRef<PhaserGameRef, PhaserGameProps>(
       awayTeam,
       playbackSpeed = 1,
       isPaused = false,
+      weather = 'Night',
       onTimeUpdate,
       onEvent,
       onScoreUpdate,
@@ -126,6 +128,7 @@ export const PhaserGame = forwardRef<PhaserGameRef, PhaserGameProps>(
         awayTeam,
         playbackSpeed,
         isPaused,
+        weather,
         callbacks: callbacksRef.current,
       });
 

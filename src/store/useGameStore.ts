@@ -72,6 +72,8 @@ import {
 } from '../engine/cup';
 import { calculateSponsorBonus, getSponsorById } from '../engine/sponsors';
 import { exportSaveData, importSaveData } from '../engine/sharing';
+import { calculateEloChange } from '../engine/pvp';
+import { applyMoraleDelta } from '../engine/press';
 
 export type ActiveTab = 'home' | 'squad' | 'match' | 'league' | 'profile';
 
@@ -129,6 +131,20 @@ export interface GameState {
   // Save Data Sharing & Portability
   exportGameData: () => string;
   importGameData: (jsonString: string) => Promise<{ success: boolean; message: string }>;
+
+  // Version 0.6.0 PvP & Kit Design & Press Conference Actions
+  recordPvPResult: (
+    result: MatchResult,
+    opponentRating: number
+  ) => Promise<{ eloChange: number; newRating: number }>;
+  updateKitDesign: (
+    homePrimary?: string,
+    homeSecondary?: string,
+    awayPrimary?: string,
+    awaySecondary?: string,
+    pattern?: 'solid' | 'stripes' | 'hoops' | 'half'
+  ) => Promise<void>;
+  answerPressConference: (moraleDelta: number) => Promise<void>;
 
   // Phase 4 Trophy & Season Awards
   claimLeaguePrize: () => Promise<{ prize: number; success: boolean; message: string }>;
@@ -321,7 +337,16 @@ export const useGameStore = create<GameState>((set, get) => ({
     const totalMatchIncome = prizeMoney + gateReceipts + sponsorBonus;
 
     // Apply match fatigue to squad: starting XI players fatigue, bench players recover
+    // If match was played in Rainy weather, extra fatigue (staminaMultiplier 1.25)
     let fatiguedSquad = applyMatchFatigue(club.squad, club.startingXI);
+    if (result.weather === 'Rainy') {
+      fatiguedSquad = fatiguedSquad.map((p) => {
+        if (club.startingXI.includes(p.id)) {
+          return { ...p, fitness: Math.max(20, (p.fitness ?? 100) - 4) };
+        }
+        return p;
+      });
+    }
 
     // Apply medical level recovery bonus (+5%, +10%, +15%)
     const medLevel = club.facilities?.medicalLevel ?? 1;
@@ -363,11 +388,16 @@ export const useGameStore = create<GameState>((set, get) => ({
         }
       }
 
+      const moraleDelta = isWin ? 5 : isDraw ? 0 : -5;
+      const currentMorale = player.morale ?? 80;
+      const updatedMorale = Math.max(20, Math.min(100, currentMorale + moraleDelta));
+
       return {
         ...player,
         yellowCards,
         redCards,
         isSuspended,
+        morale: updatedMorale,
       };
     });
 
@@ -1047,5 +1077,77 @@ export const useGameStore = create<GameState>((set, get) => ({
         message: err instanceof Error ? err.message : 'Gagal memuat naik data simpanan.',
       };
     }
+  },
+
+  recordPvPResult: async (result: MatchResult, opponentRating: number) => {
+    const { club } = get();
+    if (!club) throw new Error('Club uninitialized');
+
+    const isHome = result.homeClub.id === club.id;
+    const userScore = isHome ? result.homeScore : result.awayScore;
+    const oppScore = isHome ? result.awayScore : result.homeScore;
+
+    const currentRating = club.pvpRating ?? 1200;
+    const eloChange = calculateEloChange(currentRating, opponentRating, userScore, oppScore);
+    const newRating = Math.max(800, currentRating + eloChange);
+
+    const isWin = userScore > oppScore;
+    const isDraw = userScore === oppScore;
+
+    const currentRecord = club.pvpRecord ?? { won: 0, drawn: 0, lost: 0 };
+    const updatedRecord = {
+      won: currentRecord.won + (isWin ? 1 : 0),
+      drawn: currentRecord.drawn + (isDraw ? 1 : 0),
+      lost: currentRecord.lost + (!isWin && !isDraw ? 1 : 0),
+    };
+
+    const updatedClub: Club = {
+      ...club,
+      pvpRating: newRating,
+      pvpRecord: updatedRecord,
+    };
+
+    await get().recordMatchResult(result);
+    await saveClub(updatedClub);
+    set({ club: updatedClub });
+
+    return { eloChange, newRating };
+  },
+
+  updateKitDesign: async (
+    homePrimary?: string,
+    homeSecondary?: string,
+    awayPrimary?: string,
+    awaySecondary?: string,
+    pattern?: 'solid' | 'stripes' | 'hoops' | 'half'
+  ) => {
+    const { club } = get();
+    if (!club) return;
+
+    const updatedClub: Club = {
+      ...club,
+      primaryColor: homePrimary || club.primaryColor,
+      secondaryColor: homeSecondary || club.secondaryColor,
+      awayPrimaryColor: awayPrimary || club.awayPrimaryColor,
+      awaySecondaryColor: awaySecondary || club.awaySecondaryColor,
+      kitPattern: pattern || club.kitPattern || 'solid',
+    };
+
+    await saveClub(updatedClub);
+    set({ club: updatedClub });
+  },
+
+  answerPressConference: async (moraleDelta: number) => {
+    const { club } = get();
+    if (!club) return;
+
+    const updatedSquad = applyMoraleDelta(club.squad, moraleDelta);
+    const updatedClub: Club = {
+      ...club,
+      squad: updatedSquad,
+    };
+
+    await saveClub(updatedClub);
+    set({ club: updatedClub });
   },
 }));

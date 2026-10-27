@@ -1,7 +1,7 @@
 # MainBola: Project Task & Progress Tracker
 
-> **Current Version:** `v0.5.0` (Completed)  
-> **Previous Versions:** `v0.1.0` (Phase 1 Complete), `v0.2.0` (Phase 2 Complete), `v0.2.1` (Rebranding & Logo Complete), `v0.3.0` (Player Progression & Transfers Complete), `v0.4.0` (Audio & Trophies Complete)  
+> **Current Version:** `v0.6.0` (Completed)  
+> **Previous Versions:** `v0.1.0` (Phase 1 Complete), `v0.2.0` (Phase 2 Complete), `v0.2.1` (Rebranding & Logo Complete), `v0.3.0` (Player Progression & Transfers Complete), `v0.4.0` (Audio & Trophies Complete), `v0.5.0` (Facilities & Knockout Cup Complete)  
 > **Last Updated:** 2026-10-27
 
 ---
@@ -195,4 +195,37 @@
 
 ---
 
-## 🔮 Version 0.6.0: Cloud Sync, Multiplayer WebSockets & Custom Tournaments (Planned)
+### 🟢 Version 0.6.0: Asynchronous PvP Duels, Dynamic Weather, Kit Designer, Press Conferences & MOTM Ratings (Completed)
+*Completed on 2026-10-27 • 168/168 Unit Tests Passing • Playwright E2E Verified*
+
+- [x] **1. Asynchronous PvP Duel Engine (`src/engine/pvp.ts`, `src/types/pvp.ts`, `src/components/match/PvPChallengeModal.tsx`)**:
+  - [x] Base64 code encoder/decoder with `MBPVP_` prefix packing full club snapshot, starting XI, formation, and manager Elo.
+  - [x] URL hash routing support (`#challenge=MBPVP_...`) for 1-click PvP duel imports.
+  - [x] Standard K=32 Elo rating system updating after every PvP duel with full win/draw/loss tracking.
+  - [x] Manager PvP Ranks: Amatur (🥉 <1100), Semi-Pro (🥈 1100–1299), Profesional (🥇 1300–1499), Elit (💎 1500+).
+  - [x] New Trophy: *Wira PvP (PvP Champion)* awarded upon reaching Elo 1300+ or 5 PvP duel victories.
+- [x] **2. Dynamic Weather & Pitch Visual Effects (`src/engine/weather.ts`, `src/renderer/MatchScene.ts`)**:
+  - [x] Three dynamic weather conditions: `Sunny` (☀️ Panas Terik), `Rainy` (🌧️ Hujan Lebat), `Night` (🌙 Malam Lampu Limpah).
+  - [x] Deterministic weather engine tied to match seed with pre-match forecast badge.
+  - [x] Realistic gameplay modifiers: Sunny increases player stamina depletion rate (+20%), Rainy increases sliding tackle frequency and foul/card risk (+25%).
+  - [x] Phaser 3 visual rendering: Animated procedural raindrops across canvas, darkened stadium night tint, and 4 corner stadium floodlight glow effects.
+- [x] **3. Kit Designer & Smart Kit Clash Detection (`src/components/squad/KitDesignerModal.tsx`, `src/renderer/MatchScene.ts`)**:
+  - [x] Full Away kit customizer with primary & secondary color pickers.
+  - [x] 4 Kit patterns: Solid, Vertical Stripes, Hoops, and Half/Half.
+  - [x] Smart kit clash algorithm: Automatically detects when home and opponent primary jersey colors clash (RGB Euclidean distance < 85) and automatically activates the away kit.
+- [x] **4. Pre-Match Press Conferences & Squad Morale (`src/engine/press.ts`, `src/components/match/PressConferenceModal.tsx`)**:
+  - [x] Media questions generator addressing team form, tactical mentality, and key player expectations.
+  - [x] 3 selectable manager answers per press conference delivering direct morale adjustments (+4% to +8% boost or risky penalties).
+  - [x] Squad Morale system: 20% to 100% morale indicator (🔥) on all player cards influencing match performance.
+- [x] **5. Player Performance Ratings & Man of the Match (`src/engine/ratings.ts`, `src/engine/simulator.ts`)**:
+  - [x] In-match 5.0 to 10.0 performance rating calculator evaluating goals, assists, shots on target, saves, clean sheets, and cards.
+  - [x] Official ⭐ *Pemain Terbaik Perlawanan (Man of the Match)* spotlight card in post-match breakdown.
+  - [x] Individual player ratings list for both home and away squads.
+- [x] **6. Verification & Testing**:
+  - [x] 31 new unit tests (Total: 168 passing unit tests across 17 test suites).
+  - [x] Playwright E2E browser test passing covering Kit Designer, Press Conference, and PvP duel modals.
+  - [x] Production build (`tsc && vite build`) passed with 16 precached PWA service worker entries.
+
+---
+
+## 🔮 Version 0.7.0: Real-Time Audio Commentary, Matchday Weather Forecast, & Advanced Tournaments (Planned)

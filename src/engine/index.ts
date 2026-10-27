@@ -6,4 +6,8 @@ export * from './training';
 export * from './transfers';
 export * from './audio';
 export * from './trophies';
+export * from './pvp';
+export * from './weather';
+export * from './press';
+export * from './ratings';
 

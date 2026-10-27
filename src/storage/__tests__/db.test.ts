@@ -153,6 +153,40 @@ describe('IndexedDB Persistence Layer (db.ts)', () => {
       const retrieved = await getClub();
       expect(retrieved).toBeNull();
     });
+
+    it('normalizes legacy clubs with v0.6.0 defaults (morale 80, kit colors, pvpRating 1200)', async () => {
+      // Simulate raw legacy club stored in IndexedDB without v0.6.0 properties
+      const legacyRawClub: any = {
+        id: 'legacy_club',
+        name: 'Legacy FC',
+        primaryColor: '#ff0000',
+        secondaryColor: '#ffffff',
+        badgeId: 'b1',
+        formation: '4-3-3',
+        startingXI: ['p1'],
+        tactics: 'Balanced',
+        stats: { played: 0, won: 0, drawn: 0, lost: 0, goalsFor: 0, goalsAgainst: 0 },
+        createdAt: 1700000000000,
+        squad: [
+          {
+            id: 'p1',
+            name: 'Legacy Player',
+            position: 'ATT',
+            overallRating: 70,
+            attributes: { attack: 70, defense: 40, passing: 60, speed: 70, stamina: 70, goalkeeping: 10 },
+          },
+        ],
+      };
+
+      await saveClub(legacyRawClub);
+      const normalized = await getClub();
+      expect(normalized).not.toBeNull();
+      expect(normalized?.pvpRating).toBe(1200);
+      expect(normalized?.pvpRecord).toEqual({ won: 0, drawn: 0, lost: 0 });
+      expect(normalized?.awayPrimaryColor).toBeDefined();
+      expect(normalized?.kitPattern).toBe('solid');
+      expect(normalized?.squad[0].morale).toBe(80);
+    });
   });
 
   describe('Manager profile store', () => {

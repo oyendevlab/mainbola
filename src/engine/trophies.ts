@@ -47,6 +47,13 @@ export const TROPHY_DEFINITIONS: Record<string, Trophy> = {
     icon: '⭐',
     category: 'CAREER',
   },
+  PVP_CHAMPION: {
+    id: 'PVP_CHAMPION',
+    title: 'Wira PvP',
+    description: 'Mencapai Elo 1300+ atau memenangi sekurang-kurangnya 5 perlawanan PvP.',
+    icon: '⚔️',
+    category: 'PVP',
+  },
 };
 
 /**
@@ -173,6 +180,16 @@ export function evaluateUnlockedTrophies(
     });
   }
 
+  // 7. PVP_CHAMPION: Reaching 1300+ Elo or winning 5 PvP matches
+  const pvpRating = club.pvpRating ?? 1200;
+  const pvpWins = club.pvpRecord?.won ?? 0;
+  if (pvpRating >= 1300 || pvpWins >= 5) {
+    unlocked.push({
+      ...TROPHY_DEFINITIONS.PVP_CHAMPION,
+      unlockedAt: getLatestTimestamp(),
+    });
+  }
+
   return unlocked;
 }
 
@@ -268,6 +285,21 @@ export function calculateTrophyProgress(
         target: 1,
         percentage: isWon ? 100 : 0,
         isCompleted: isWon,
+      };
+    }
+
+    case 'PVP_CHAMPION': {
+      const pvpRating = club.pvpRating ?? 1200;
+      const pvpWins = club.pvpRecord?.won ?? 0;
+      const isEloTarget = pvpRating >= 1300;
+      const isWinsTarget = pvpWins >= 5;
+      const isCompleted = isEloTarget || isWinsTarget;
+      const current = Math.min(5, Math.max(pvpWins, isEloTarget ? 5 : 0));
+      return {
+        current,
+        target: 5,
+        percentage: isCompleted ? 100 : Math.round((current / 5) * 100),
+        isCompleted,
       };
     }
 

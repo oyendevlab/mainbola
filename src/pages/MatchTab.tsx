@@ -2,9 +2,13 @@ import React, { useState, useRef, useEffect } from 'react';
 import { useGameStore } from '../store/useGameStore';
 import { PRESET_AI_CLUBS, generateClub, createClubSnapshot } from '../engine/generator';
 import { simulateMatch } from '../engine/simulator';
+import { getRandomWeather, getWeatherEffects } from '../engine/weather';
+import { getPvPRank } from '../engine/pvp';
 import { MatchResult, MatchEvent, TacticalStyle, Player } from '../types';
 import { PhaserGame, PhaserGameRef } from '../renderer/PhaserGame';
 import { BadgeIcon } from '../components/common/BadgeIcon';
+import { PressConferenceModal } from '../components/match/PressConferenceModal';
+import { PvPChallengeModal } from '../components/match/PvPChallengeModal';
 import confetti from 'canvas-confetti';
 import {
   Play,
@@ -17,6 +21,8 @@ import {
   Volume2,
   VolumeX,
   ArrowLeftRight,
+  Mic,
+  Swords,
 } from 'lucide-react';
 
 export const MatchTab: React.FC = () => {
@@ -24,6 +30,7 @@ export const MatchTab: React.FC = () => {
     club,
     profile,
     recordMatchResult,
+    recordPvPResult,
     setActiveTab,
     updateTactics,
     setStartingXI,
@@ -45,7 +52,24 @@ export const MatchTab: React.FC = () => {
   const [selectedSubStarterId, setSelectedSubStarterId] = useState<string | null>(null);
   const [subsCount, setSubsCount] = useState(0);
 
+  // Version 0.6.0 Modals & States
+  const [showPressModal, setShowPressModal] = useState(false);
+  const [showPvPModal, setShowPvPModal] = useState(false);
+  const [currentMatchSeed] = useState(() => Date.now());
+  const [pvpOpponentRating, setPvpOpponentRating] = useState<number | null>(null);
+
   const phaserRef = useRef<PhaserGameRef | null>(null);
+
+  // Detect #challenge= in window.location.hash on mount
+  useEffect(() => {
+    if (typeof window !== 'undefined' && window.location.hash) {
+      const hash = window.location.hash;
+      const match = hash.match(/#challenge=([^&]+)/);
+      if (match && match[1]) {
+        setShowPvPModal(true);
+      }
+    }
+  }, []);
 
   // Sync replay speed preference on mount
   useEffect(() => {
@@ -55,6 +79,10 @@ export const MatchTab: React.FC = () => {
   }, [profile.replaySpeed]);
 
   if (!club) return null;
+
+  // Pre-match forecast weather for currentMatchSeed
+  const matchWeather = getRandomWeather(currentMatchSeed);
+  const weatherFx = getWeatherEffects(matchWeather);
 
   const handleStartMatch = () => {
     // Generate AI Club from preset
@@ -71,15 +99,32 @@ export const MatchTab: React.FC = () => {
     const homeSnapshot = createClubSnapshot(club);
     const awaySnapshot = createClubSnapshot(aiClub);
 
-    // Deterministic simulation with seed
-    const seed = Date.now();
-    const result = simulateMatch(homeSnapshot, awaySnapshot, seed);
+    // Deterministic simulation with seed & weather
+    const seed = currentMatchSeed;
+    const result = simulateMatch(homeSnapshot, awaySnapshot, seed, matchWeather);
 
+    setPvpOpponentRating(null);
     setMatchResult(result);
     setHomeScore(0);
     setAwayScore(0);
     setCurrentMinute(0);
     setCommentary('Kickoff! The match is underway.');
+    setIsPlayingReplay(true);
+    setIsPaused(false);
+    setShowStatsModal(false);
+    setShowHalftimeModal(false);
+    setSubsCount(0);
+    setSelectedSubStarterId(null);
+    setHalftimeTactics(club.tactics);
+  };
+
+  const handleStartPvPMatch = (result: MatchResult, opponentRating: number) => {
+    setPvpOpponentRating(opponentRating);
+    setMatchResult(result);
+    setHomeScore(0);
+    setAwayScore(0);
+    setCurrentMinute(0);
+    setCommentary(`PvP Duel Kickoff! ${result.homeClub.name} vs ${result.awayClub.name}`);
     setIsPlayingReplay(true);
     setIsPaused(false);
     setShowStatsModal(false);
@@ -158,7 +203,11 @@ export const MatchTab: React.FC = () => {
     setShowStatsModal(true);
 
     if (matchResult) {
-      recordMatchResult(matchResult);
+      if (pvpOpponentRating !== null) {
+        recordPvPResult(matchResult, pvpOpponentRating);
+      } else {
+        recordMatchResult(matchResult);
+      }
 
       // Trigger celebratory confetti if user club won
       const isHome = matchResult.homeClub.id === club.id;
@@ -236,6 +285,76 @@ export const MatchTab: React.FC = () => {
                 </div>
               </div>
             </div>
+          </div>
+
+          {/* Pre-Match Weather Forecast & Press Conference Banner */}
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+            {/* Weather Forecast Badge */}
+            <div className="p-3.5 rounded-2xl bg-navy-900 border border-slate-800 flex items-center justify-between shadow-xl">
+              <div className="flex items-center gap-3">
+                <div className="w-10 h-10 rounded-xl bg-blue-500/10 border border-blue-500/30 flex items-center justify-center text-xl">
+                  {weatherFx.icon}
+                </div>
+                <div>
+                  <span className="text-[9px] font-bold text-slate-400 uppercase tracking-wider block">
+                    Ramalan Cuaca Padang
+                  </span>
+                  <div className="text-xs font-bold text-white flex items-center gap-1.5">
+                    <span>{weatherFx.label}</span>
+                    <span className="text-[10px] text-slate-400">({matchWeather})</span>
+                  </div>
+                  <p className="text-[10px] text-slate-400 mt-0.5 line-clamp-1">{weatherFx.description}</p>
+                </div>
+              </div>
+            </div>
+
+            {/* Press Conference Action */}
+            <div className="p-3.5 rounded-2xl bg-navy-900 border border-slate-800 flex items-center justify-between shadow-xl">
+              <div className="flex items-center gap-3 min-w-0">
+                <div className="w-10 h-10 rounded-xl bg-amber-500/10 border border-amber-500/30 flex items-center justify-center text-amber-400 shrink-0">
+                  <Mic className="w-5 h-5" />
+                </div>
+                <div className="min-w-0">
+                  <span className="text-[9px] font-bold text-amber-400 uppercase tracking-wider block">
+                    Bilik Media
+                  </span>
+                  <div className="text-xs font-bold text-white truncate">Sidang Media Pra-Perlawanan</div>
+                  <p className="text-[10px] text-slate-400 truncate">Jawab soalan wartawan untuk rangsang moral</p>
+                </div>
+              </div>
+              <button
+                onClick={() => setShowPressModal(true)}
+                className="px-3 py-1.5 rounded-xl bg-amber-500/20 hover:bg-amber-500/30 border border-amber-500/40 text-amber-300 text-xs font-bold transition shrink-0 cursor-pointer"
+              >
+                Masuk
+              </button>
+            </div>
+          </div>
+
+          {/* PvP Challenge Banner */}
+          <div className="p-4 rounded-2xl bg-gradient-to-r from-violet-950/60 to-purple-950/60 border border-purple-800/40 flex items-center justify-between shadow-xl">
+            <div className="flex items-center gap-3 min-w-0">
+              <div className="w-10 h-10 rounded-xl bg-purple-500/20 border border-purple-500/40 flex items-center justify-center text-purple-300 shrink-0">
+                <Swords className="w-5 h-5" />
+              </div>
+              <div className="min-w-0">
+                <div className="flex items-center gap-2">
+                  <span className="text-xs font-bold text-white">Cabaran PvP (Lawan Rakan)</span>
+                  <span className="text-[10px] font-mono px-2 py-0.5 rounded-full bg-purple-500/20 text-purple-300 border border-purple-500/30">
+                    Elo {club.pvpRating ?? 1200} • {getPvPRank(club.pvpRating ?? 1200).title}
+                  </span>
+                </div>
+                <p className="text-[11px] text-slate-400 truncate">
+                  Kongsi kod cabaran pasukan atau masukkan kod rakan untuk duel asinkronus!
+                </p>
+              </div>
+            </div>
+            <button
+              onClick={() => setShowPvPModal(true)}
+              className="px-3.5 py-2 rounded-xl bg-purple-500 hover:bg-purple-400 text-navy-950 font-bold text-xs transition shrink-0 cursor-pointer shadow-lg shadow-purple-500/20"
+            >
+              Cabaran PvP
+            </button>
           </div>
 
           {/* AI Opponent Selector Carousel / Grid */}
@@ -348,6 +467,7 @@ export const MatchTab: React.FC = () => {
             <PhaserGame
               ref={phaserRef}
               events={matchResult.events}
+              weather={matchResult.weather}
               homeTeam={{
                 id: matchResult.homeClub.id,
                 name: matchResult.homeClub.name,
@@ -360,6 +480,9 @@ export const MatchTab: React.FC = () => {
                 name: matchResult.awayClub.name,
                 primaryColor: matchResult.awayClub.primaryColor,
                 secondaryColor: matchResult.awayClub.secondaryColor,
+                awayPrimaryColor: matchResult.awayClub.awayPrimaryColor,
+                awaySecondaryColor: matchResult.awayClub.awaySecondaryColor,
+                kitPattern: matchResult.awayClub.kitPattern,
                 formation: matchResult.awayClub.formation,
               }}
               playbackSpeed={playbackSpeed}
@@ -448,10 +571,17 @@ export const MatchTab: React.FC = () => {
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-md p-4 overflow-y-auto">
           <div className="bg-navy-900 border border-slate-700/80 rounded-2xl w-full max-w-md p-6 shadow-2xl my-auto animate-in zoom-in-95 duration-150">
             {/* Final Result Header */}
-            <div className="text-center mb-6">
-              <span className="text-[10px] font-mono font-bold uppercase tracking-wider text-emerald-400 bg-emerald-500/10 px-2.5 py-1 rounded-full border border-emerald-500/30 inline-block mb-2">
-                Match Completed
-              </span>
+            <div className="text-center mb-5">
+              <div className="flex items-center justify-center gap-2 mb-2">
+                <span className="text-[10px] font-mono font-bold uppercase tracking-wider text-emerald-400 bg-emerald-500/10 px-2.5 py-1 rounded-full border border-emerald-500/30">
+                  Perlawanan Selesai
+                </span>
+                {matchResult.weather && (
+                  <span className="text-[10px] font-mono font-bold text-slate-300 bg-slate-800/80 px-2.5 py-1 rounded-full border border-slate-700">
+                    {getWeatherEffects(matchResult.weather).icon} {getWeatherEffects(matchResult.weather).label}
+                  </span>
+                )}
+              </div>
               <div className="flex items-center justify-center gap-4 mt-2">
                 <div className="text-right">
                   <div className="text-xs font-bold text-white">{matchResult.homeClub.name}</div>
@@ -467,17 +597,39 @@ export const MatchTab: React.FC = () => {
               </div>
             </div>
 
+            {/* Man of the Match (MOTM) Card */}
+            {matchResult.motmPlayerName && (
+              <div className="p-3.5 rounded-xl bg-gradient-to-r from-amber-500/20 via-yellow-500/10 to-amber-500/20 border border-amber-500/30 flex items-center justify-between mb-4 shadow-md">
+                <div className="flex items-center gap-2.5">
+                  <div className="w-9 h-9 rounded-xl bg-amber-500/30 border border-amber-500/50 flex items-center justify-center text-lg shadow-inner">
+                    ⭐
+                  </div>
+                  <div>
+                    <span className="text-[9px] font-black uppercase tracking-wider text-amber-400 block">
+                      Pemain Terbaik Perlawanan (MOTM)
+                    </span>
+                    <span className="text-xs font-bold text-white">{matchResult.motmPlayerName}</span>
+                  </div>
+                </div>
+                {matchResult.playerRatings && matchResult.motmPlayerId && (
+                  <div className="px-2.5 py-1 rounded-lg bg-amber-400 text-navy-950 font-black font-mono text-xs shadow">
+                    ★ {matchResult.playerRatings[matchResult.motmPlayerId] ?? 8.5}
+                  </div>
+                )}
+              </div>
+            )}
+
             {/* Match Statistics Comparison */}
-            <div className="space-y-3 p-4 rounded-xl bg-navy-950 border border-slate-800 mb-6">
+            <div className="space-y-3 p-4 rounded-xl bg-navy-950 border border-slate-800 mb-4">
               <h4 className="text-[10px] font-bold text-slate-400 uppercase tracking-wider text-center mb-2">
-                Match Statistics
+                Statistik Perlawanan
               </h4>
 
               {/* Possession */}
               <div>
                 <div className="flex justify-between text-xs font-mono font-bold text-slate-300 mb-1">
                   <span>{matchResult.homeStats.possession}%</span>
-                  <span className="text-[10px] font-sans font-semibold text-slate-400 uppercase">Possession</span>
+                  <span className="text-[10px] font-sans font-semibold text-slate-400 uppercase">Penguasaan Bola</span>
                   <span>{matchResult.awayStats.possession}%</span>
                 </div>
                 <div className="h-2 rounded-full overflow-hidden flex bg-slate-800">
@@ -495,31 +647,78 @@ export const MatchTab: React.FC = () => {
               {/* Shots */}
               <div className="flex items-center justify-between text-xs py-1 border-t border-slate-800/80">
                 <span className="font-mono font-bold text-white">{matchResult.homeStats.shots}</span>
-                <span className="text-slate-400 text-[11px]">Total Shots</span>
+                <span className="text-slate-400 text-[11px]">Jumlah Percubaan</span>
                 <span className="font-mono font-bold text-white">{matchResult.awayStats.shots}</span>
               </div>
 
               {/* Shots on Target */}
               <div className="flex items-center justify-between text-xs py-1 border-t border-slate-800/80">
                 <span className="font-mono font-bold text-emerald-400">{matchResult.homeStats.shotsOnTarget}</span>
-                <span className="text-slate-400 text-[11px]">Shots on Target</span>
+                <span className="text-slate-400 text-[11px]">Percubaan Tepat</span>
                 <span className="font-mono font-bold text-emerald-400">{matchResult.awayStats.shotsOnTarget}</span>
               </div>
 
               {/* Saves */}
               <div className="flex items-center justify-between text-xs py-1 border-t border-slate-800/80">
                 <span className="font-mono font-bold text-white">{matchResult.homeStats.saves}</span>
-                <span className="text-slate-400 text-[11px]">Goalkeeper Saves</span>
+                <span className="text-slate-400 text-[11px]">Tangkapan Penjaga Gol</span>
                 <span className="font-mono font-bold text-white">{matchResult.awayStats.saves}</span>
               </div>
 
               {/* Tackles */}
               <div className="flex items-center justify-between text-xs py-1 border-t border-slate-800/80">
                 <span className="font-mono font-bold text-white">{matchResult.homeStats.tackles}</span>
-                <span className="text-slate-400 text-[11px]">Tackles Made</span>
+                <span className="text-slate-400 text-[11px]">Tackle Berjaya</span>
                 <span className="font-mono font-bold text-white">{matchResult.awayStats.tackles}</span>
               </div>
             </div>
+
+            {/* Individual Player Ratings Accordion / List */}
+            {matchResult.playerRatings && (
+              <div className="p-3.5 rounded-xl bg-navy-950 border border-slate-800 mb-6 max-h-40 overflow-y-auto space-y-1.5">
+                <div className="text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-2 flex items-center justify-between">
+                  <span>Penilaian Pemain (Ratings)</span>
+                  <span className="text-[9px] text-slate-500 font-normal">Skala 5.0 - 10.0</span>
+                </div>
+                <div className="grid grid-cols-2 gap-2">
+                  {/* Home Ratings */}
+                  <div className="space-y-1">
+                    <div className="text-[9px] font-bold text-emerald-400 uppercase truncate">
+                      {matchResult.homeClub.name}
+                    </div>
+                    {matchResult.homeClub.startingXI.map((p) => {
+                      const rating = matchResult.playerRatings?.[p.id] ?? 6.0;
+                      return (
+                        <div key={p.id} className="flex items-center justify-between text-[11px] bg-slate-900/60 px-2 py-0.5 rounded border border-slate-800/80">
+                          <span className="text-slate-300 truncate max-w-[80px]">{p.name}</span>
+                          <span className={`font-mono font-bold ${rating >= 8.0 ? 'text-amber-400' : rating >= 7.0 ? 'text-emerald-400' : 'text-slate-400'}`}>
+                            {rating.toFixed(1)}
+                          </span>
+                        </div>
+                      );
+                    })}
+                  </div>
+
+                  {/* Away Ratings */}
+                  <div className="space-y-1">
+                    <div className="text-[9px] font-bold text-amber-400 uppercase truncate">
+                      {matchResult.awayClub.name}
+                    </div>
+                    {matchResult.awayClub.startingXI.map((p) => {
+                      const rating = matchResult.playerRatings?.[p.id] ?? 6.0;
+                      return (
+                        <div key={p.id} className="flex items-center justify-between text-[11px] bg-slate-900/60 px-2 py-0.5 rounded border border-slate-800/80">
+                          <span className="text-slate-300 truncate max-w-[80px]">{p.name}</span>
+                          <span className={`font-mono font-bold ${rating >= 8.0 ? 'text-amber-400' : rating >= 7.0 ? 'text-emerald-400' : 'text-slate-400'}`}>
+                            {rating.toFixed(1)}
+                          </span>
+                        </div>
+                      );
+                    })}
+                  </div>
+                </div>
+              </div>
+            )}
 
             {/* Modal Actions */}
             <div className="flex gap-2">
@@ -700,6 +899,20 @@ export const MatchTab: React.FC = () => {
           </div>
         </div>
       )}
+
+      {/* Press Conference Modal */}
+      <PressConferenceModal
+        isOpen={showPressModal}
+        onClose={() => setShowPressModal(false)}
+        seed={currentMatchSeed}
+      />
+
+      {/* PvP Challenge Modal */}
+      <PvPChallengeModal
+        isOpen={showPvPModal}
+        onClose={() => setShowPvPModal(false)}
+        onStartPvPMatch={handleStartPvPMatch}
+      />
     </div>
   );
 };

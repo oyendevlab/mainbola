@@ -10,6 +10,8 @@ import {
 } from '../types';
 import { createClubSnapshot } from './generator';
 import { createPRNG, PRNG } from './prng';
+import { getRandomWeather, getWeatherEffects, WeatherType } from './weather';
+import { calculateMatchRatings } from './ratings';
 
 interface TeamTacticalModifiers {
   shotFrequency: number;
@@ -62,11 +64,12 @@ function calculateTeamStrengths(startingXI: Player[]): TeamStrengths {
   const mids = startingXI.filter((p) => p.position === 'MID');
   const atts = startingXI.filter((p) => p.position === 'ATT');
 
-  // Fitness impact: 100% fitness = 1.0 multiplier; 50% fitness = 0.825 multiplier
-  const getEffective = (p: Player) =>
-    p.fitness !== undefined
-      ? p.overallRating * (0.65 + 0.35 * (p.fitness / 100))
-      : p.overallRating;
+  // Fitness and morale impact: 100% fitness = 1.0; 80% morale = 1.0
+  const getEffective = (p: Player) => {
+    const fitMult = p.fitness !== undefined ? (0.65 + 0.35 * (p.fitness / 100)) : 1.0;
+    const morMult = p.morale !== undefined ? (0.92 + 0.10 * (p.morale / 100)) : 1.0;
+    return p.overallRating * fitMult * morMult;
+  };
 
   const avgRating = (players: Player[], defaultVal = 65) =>
     players.length > 0
@@ -163,11 +166,15 @@ function resolveClubSnapshot(club: ClubSnapshot | Club): ClubSnapshot {
 export function simulateMatch(
   homeClubInput: ClubSnapshot | Club,
   awayClubInput: ClubSnapshot | Club,
-  seed: number
+  seed: number,
+  optionalWeather?: WeatherType
 ): MatchResult {
   const prng = createPRNG(seed);
   const homeClub = resolveClubSnapshot(homeClubInput);
   const awayClub = resolveClubSnapshot(awayClubInput);
+
+  const weather = optionalWeather || getRandomWeather(seed);
+  const weatherEffects = getWeatherEffects(weather);
 
   const homeTactics = getTacticalModifiers(homeClub.tactics);
   const awayTactics = getTacticalModifiers(awayClub.tactics);
@@ -470,8 +477,10 @@ export function simulateMatch(
         });
 
         // Chance of foul resulting in YELLOW_CARD or RED_CARD
+        // Weather adjustment: wet slippery pitch increases tackle foul probability
         const cardRoll = prng.next();
-        if (cardRoll < 0.14) {
+        const foulThreshold = 0.14 + (weatherEffects.foulBonus * 0.05);
+        if (cardRoll < foulThreshold) {
           const isRed = cardRoll < 0.02;
           const cardType = isRed ? 'RED_CARD' : 'YELLOW_CARD';
           const cardDesc = isRed
@@ -622,6 +631,15 @@ export function simulateMatch(
     saves: awaySaves,
   };
 
+  // Calculate individual player ratings and Man of the Match
+  const ratingsResult = calculateMatchRatings(
+    events,
+    homeClub.startingXI,
+    awayClub.startingXI,
+    currentHomeScore,
+    currentAwayScore
+  );
+
   return {
     id: `match_${seed}_${homeClub.id}_vs_${awayClub.id}`,
     seed,
@@ -633,5 +651,9 @@ export function simulateMatch(
     homeStats,
     awayStats,
     events,
+    weather,
+    motmPlayerId: ratingsResult.motmPlayerId,
+    motmPlayerName: ratingsResult.motmPlayerName,
+    playerRatings: ratingsResult.ratings,
   };
 }

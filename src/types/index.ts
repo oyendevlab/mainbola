@@ -24,6 +24,8 @@ export interface Player {
   isYouthProduct?: boolean;
   age?: number;
   potentialRating?: number;
+  morale?: number; // 0 - 100%, defaults to 80
+  matchRating?: number; // 1.0 - 10.0 in-match rating
 }
 
 export type FormationType = '4-3-3' | '4-4-2' | '4-2-3-1';
@@ -81,6 +83,11 @@ export interface Club {
   createdAt: number;
   facilities?: ClubFacilities;
   activeSponsorId?: string | null;
+  awayPrimaryColor?: string;
+  awaySecondaryColor?: string;
+  kitPattern?: 'solid' | 'stripes' | 'hoops' | 'half';
+  pvpRating?: number; // Elo rating, default 1200
+  pvpRecord?: { won: number; drawn: number; lost: number };
 }
 
 // Match Simulation Event Timeline
@@ -130,6 +137,9 @@ export interface ClubSnapshot {
   name: string;
   primaryColor: string;
   secondaryColor: string;
+  awayPrimaryColor?: string;
+  awaySecondaryColor?: string;
+  kitPattern?: 'solid' | 'stripes' | 'hoops' | 'half';
   badgeId: string;
   formation: FormationType;
   tactics: TacticalStyle;
@@ -147,6 +157,10 @@ export interface MatchResult {
   homeStats: TeamMatchStats;
   awayStats: TeamMatchStats;
   events: MatchEvent[];
+  weather?: 'Sunny' | 'Rainy' | 'Night';
+  motmPlayerId?: string;
+  motmPlayerName?: string;
+  playerRatings?: Record<string, number>;
 }
 
 export interface ManagerProfile {
@@ -201,4 +215,5 @@ export interface Trophy {
 
 export * from './league';
 export * from './cup';
+export * from './pvp';
 

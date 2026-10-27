@@ -276,6 +276,7 @@ export function generatePlayer(
     fitness: 100,
     trainingXp: 0,
     marketValue: calculatePlayerMarketValue(overallRating),
+    morale: 80,
   };
 }
 
@@ -398,6 +399,9 @@ export function createClubSnapshot(club: Club): ClubSnapshot {
     name: club.name,
     primaryColor: club.primaryColor,
     secondaryColor: club.secondaryColor,
+    awayPrimaryColor: club.awayPrimaryColor ?? '#FFFFFF',
+    awaySecondaryColor: club.awaySecondaryColor ?? club.primaryColor,
+    kitPattern: club.kitPattern ?? 'solid',
     badgeId: club.badgeId,
     formation: club.formation,
     tactics: club.tactics,
@@ -486,6 +490,11 @@ export function generateClub(
     },
     budget: 50000,
     createdAt: 1700000000000 + (actualSeed % 10000000),
+    awayPrimaryColor: '#FFFFFF',
+    awaySecondaryColor: priColor,
+    kitPattern: 'solid',
+    pvpRating: 1200,
+    pvpRecord: { won: 0, drawn: 0, lost: 0 },
   };
 }
 

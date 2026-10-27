@@ -161,6 +161,21 @@ function normalizeClub(club: Club): Club {
   if (club.activeSponsorId === undefined) {
     club.activeSponsorId = null;
   }
+  if (!club.awayPrimaryColor) {
+    club.awayPrimaryColor = '#FFFFFF';
+  }
+  if (!club.awaySecondaryColor) {
+    club.awaySecondaryColor = club.primaryColor;
+  }
+  if (!club.kitPattern) {
+    club.kitPattern = 'solid';
+  }
+  if (club.pvpRating === undefined) {
+    club.pvpRating = 1200;
+  }
+  if (!club.pvpRecord) {
+    club.pvpRecord = { won: 0, drawn: 0, lost: 0 };
+  }
   if (Array.isArray(club.squad)) {
     club.squad = club.squad.map((p) => ({
       ...p,
@@ -171,6 +186,7 @@ function normalizeClub(club: Club): Club {
       redCards: p.redCards ?? 0,
       isSuspended: p.isSuspended ?? false,
       isYouthProduct: p.isYouthProduct ?? false,
+      morale: p.morale ?? 80,
     }));
   }
   return club;

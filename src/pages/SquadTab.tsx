@@ -2,9 +2,10 @@ import React, { useState } from 'react';
 import { useGameStore } from '../store/useGameStore';
 import { FormationType, TacticalStyle, Player, PlayerPosition } from '../types';
 import { FORMATION_CONFIGS, validateSquadSelection } from '../types/formations';
-import { Users, Shield, Zap, Compass, CheckCircle2, AlertCircle, ArrowUpDown, Info, Dumbbell, ShoppingBag } from 'lucide-react';
+import { Users, Shield, Zap, Compass, CheckCircle2, AlertCircle, ArrowUpDown, Info, Dumbbell, ShoppingBag, Shirt } from 'lucide-react';
 import { TrainingView } from '../components/squad/TrainingView';
 import { TransfersView } from '../components/squad/TransfersView';
+import { KitDesignerModal } from '../components/squad/KitDesignerModal';
 
 export const SquadTab: React.FC = () => {
   const { club, updateFormation, updateTactics, setStartingXI } = useGameStore();
@@ -13,6 +14,7 @@ export const SquadTab: React.FC = () => {
   const [selectedSlotIndex, setSelectedSlotIndex] = useState<number | null>(null);
   const [filterPos, setFilterPos] = useState<'ALL' | PlayerPosition>('ALL');
   const [inspectedPlayer, setInspectedPlayer] = useState<Player | null>(null);
+  const [showKitModal, setShowKitModal] = useState(false);
 
   if (!club) return null;
 
@@ -185,14 +187,23 @@ export const SquadTab: React.FC = () => {
           </div>
         </div>
 
-        {/* Tactical Info Badge */}
-        <div className="text-[11px] text-slate-400 bg-navy-950/80 rounded-xl p-2.5 border border-slate-800 flex items-center gap-2">
-          <Info className="w-4 h-4 text-emerald-400 shrink-0" />
-          <span>
-            {club.tactics === 'Attacking' && 'High offensive press: Increases shot volume and goal threat, but leaves defense open to counters.'}
-            {club.tactics === 'Balanced' && 'Flexible equilibrium: Standard passing, structured defense, and measured transitions.'}
-            {club.tactics === 'Defensive' && 'Compact low-block: Maximizes interceptions, tackles, and saves, while reducing shot frequency.'}
-          </span>
+        {/* Tactical Info Badge & Kit Designer CTA */}
+        <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-2.5 text-[11px] text-slate-400 bg-navy-950/80 rounded-xl p-2.5 border border-slate-800">
+          <div className="flex items-center gap-2">
+            <Info className="w-4 h-4 text-emerald-400 shrink-0" />
+            <span>
+              {club.tactics === 'Attacking' && 'High offensive press: Increases shot volume and goal threat, but leaves defense open to counters.'}
+              {club.tactics === 'Balanced' && 'Flexible equilibrium: Standard passing, structured defense, and measured transitions.'}
+              {club.tactics === 'Defensive' && 'Compact low-block: Maximizes interceptions, tackles, and saves, while reducing shot frequency.'}
+            </span>
+          </div>
+          <button
+            onClick={() => setShowKitModal(true)}
+            className="flex items-center justify-center gap-1.5 px-3 py-1.5 rounded-lg bg-emerald-500/10 hover:bg-emerald-500/20 text-emerald-400 border border-emerald-500/30 text-xs font-bold transition shrink-0 cursor-pointer"
+          >
+            <Shirt className="w-3.5 h-3.5" />
+            <span>Pereka Jersi</span>
+          </button>
         </div>
       </div>
 
@@ -459,6 +470,10 @@ export const SquadTab: React.FC = () => {
                       <span className={`font-bold ${(player.fitness ?? 100) >= 80 ? 'text-emerald-400' : (player.fitness ?? 100) >= 50 ? 'text-amber-400' : 'text-rose-400'}`}>
                         ⚡ {player.fitness ?? 100}%
                       </span>
+                      <span>•</span>
+                      <span className={`font-bold ${(player.morale ?? 80) >= 80 ? 'text-emerald-400' : (player.morale ?? 80) >= 50 ? 'text-amber-400' : 'text-rose-400'}`} title="Moral Pemain">
+                        🔥 {player.morale ?? 80}%
+                      </span>
                     </div>
                   </div>
                 </div>
@@ -476,6 +491,9 @@ export const SquadTab: React.FC = () => {
       </div>
     </div>
     )}
+
+    {/* Kit Designer Modal */}
+    <KitDesignerModal isOpen={showKitModal} onClose={() => setShowKitModal(false)} />
   </div>
   );
 };
