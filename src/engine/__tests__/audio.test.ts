@@ -7,6 +7,12 @@ import {
   playCheer,
   playTackle,
   setSoundEnabled,
+  startStadiumAmbience,
+  stopStadiumAmbience,
+  setBgVolume,
+  getBgVolume,
+  setBgSoundEnabled,
+  isBgSoundEnabled,
 } from '../audio';
 
 // Helper to create a functional mock AudioContext
@@ -203,6 +209,35 @@ describe('SoundEngine (Web Audio API Procedural Audio)', () => {
 
       expect(mockContext.createOscillator).not.toHaveBeenCalled();
       expect(mockContext.createBufferSource).not.toHaveBeenCalled();
+    });
+
+    it('starts and stops background stadium ambience cleanly', () => {
+      expect(soundEngine.isAmbienceRunning()).toBe(false);
+      startStadiumAmbience();
+      expect(soundEngine.isAmbienceRunning()).toBe(true);
+
+      expect(mockContext.createBufferSource).toHaveBeenCalled();
+      expect(mockContext.createBiquadFilter).toHaveBeenCalled();
+
+      stopStadiumAmbience();
+      expect(soundEngine.isAmbienceRunning()).toBe(false);
+    });
+
+    it('adjusts background stadium volume and mute toggles', () => {
+      setBgVolume(0.75);
+      expect(getBgVolume()).toBe(0.75);
+
+      setBgSoundEnabled(false);
+      expect(isBgSoundEnabled()).toBe(false);
+
+      setBgSoundEnabled(true);
+      expect(isBgSoundEnabled()).toBe(true);
+
+      // Clamps volume between 0 and 1
+      setBgVolume(-0.5);
+      expect(getBgVolume()).toBe(0);
+      setBgVolume(1.8);
+      expect(getBgVolume()).toBe(1);
     });
   });
 });

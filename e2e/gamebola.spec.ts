@@ -103,6 +103,16 @@ test.describe('MainBola PWA Vertical Slice', () => {
     await expect(voiceBtn).toBeVisible();
     await voiceBtn.click();
 
+    // Test stadium ambience toggle and volume slider (v0.7.1)
+    const bgSoundBtn = page.getByTestId('bg-sound-toggle');
+    await expect(bgSoundBtn).toBeVisible();
+    await bgSoundBtn.click();
+
+    const audioSlidersBtn = page.getByTestId('audio-sliders-toggle');
+    await expect(audioSlidersBtn).toBeVisible();
+    await audioSlidersBtn.click();
+    await expect(page.locator('text=Kelantangan Bunyi Latar Stadium')).toBeVisible();
+
     // Open Stats Breakdown
     const statsBtn = page.locator('button:has-text("Stats")');
     await statsBtn.click();

@@ -265,6 +265,39 @@
 
 ---
 
+## 🌟 Version 0.7.1: Kawalan Bunyi Latar Stadium & Animasi Formasi Taktikal Sebenar (COMPLETED)
+
+- [x] **1. Kawalan Bunyi Latar Stadium (Stadium Crowd Ambience & Volume Controls)**:
+  - [x] Sintesis Web Audio API tanpa fail luaran: loop audio desiran penonton (pink/white noise) dengan penapis dwi-jalur (bandpass ~480Hz & ~950Hz) serta modulasi gelombang LFO (0.2Hz) meniru ombak sorakan stadium.
+  - [x] Kawalan kelantangan bunyi latar (0% hingga 100%) dan suis tutup/buka:
+    - Suis `Radio` pantas di bilah kawalan perlawanan (`MatchTab.tsx`).
+    - Panel gelongsor kelantangan mini berserta butang pratetap (Senyap 0%, 25%, 50%, 100%).
+    - Bahagian keutamaan audio lengkap di tab profil pengurus (`ProfileTab.tsx`).
+  - [x] Integrasi `bgSoundEnabled` & `bgVolume` ke dalam IndexedDB dan Zustand Store.
+- [x] **2. Peningkatan Animasi Perlawanan & Formasi Taktikal Sebenar (Match Realism Engine)**:
+  - [x] Pergerakan teratur 22 pemain serentak (bukan lagi pemain statik):
+    - **Fasa Serangan**: Pasukan menyerang menolak barisan ke hadapan (+48px penyerang, +34px pemain tengah, +28px pertahanan garisan tinggi), pemain sayap melebar & memotong ke dalam, dan larian masuk ke kotak penalti.
+    - **Fasa Pertahanan**: Pasukan bertahan berundur ke blok kompak (low/mid block) mengawal kotak penalti dan ruang tengah.
+    - **Pertahanan Menekan (Active Presser)**: Pemain pertahanan terdekat secara automatik keluar menekan pemain pembawa bola.
+    - **Penjaga Gol Realistik**: Menyelaraskan sudut palang gol mengikut posisi bola dan bertindak sebagai sweeper keeper semasa serangan.
+    - **Animasi Larian Berirama**: Setiap pemain yang bergerak mempunyai sudut condong (tilt) dan ayunan langkah kaki (stride wobble).
+- [x] **3. Ujian & Pengesahan Kualiti**:
+  - [x] 186/186 unit tests lulus 100% merentasi 22 fail ujian.
+  - [x] Ujian Playwright E2E browser lulus menguji kawalan bunyi latar dan gelongsor audio.
+  - [x] Kompilasi TypeScript dan binaan PWA Vite sifar ralat.
+
+---
+
+## 🔮 Analisis Plugin & Alat Rujukan GitHub (`awesome-gamedev-agent-skills` & `claude-pxl`):
+1. **`awesome-gamedev-agent-skills` (gamedev-skills)**:
+   - Koleksi kemahiran pakar pembangunan game (Phaser 3, game AI, spatial positioning, boids flocking).
+   - Telah dimanfaatkan dalam v0.7.1 untuk algoritma pergerakan koordinat formasi bola sepak dinamik dan pengurusan kitaran hidup audio Phaser.
+2. **`claude-pxl` (crsolver)**:
+   - DSL seni piksel berasaskan arahan modular dan palet warna retro berbilang lapisan.
+   - Boleh digunakan untuk membina kit jersi bertema khas, animasi sprite larian berbilang bingkai (frame-by-frame running sprite sheets), dan lencana piala tersuai pada versi akan datang.
+
+---
+
 ## 🔮 Version 0.8.0: Multi-League Pyramid, International Cups, Cloud Backup, & Advanced Sound Design (Planned)
 
 - [ ] **1. Sistem Piramid Liga Berbilang Tahap (Multi-Tier Pyramid & Promotion/Relegation)**:

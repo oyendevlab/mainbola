@@ -9,6 +9,7 @@ import Phaser from 'phaser';
 import { createGameConfig, DEFAULT_CONTAINER_ID } from './config';
 import { MatchScene, TeamVisualInfo, MatchSceneCallbacks } from './MatchScene';
 import { MatchEvent } from '../types';
+import { stopStadiumAmbience } from '../engine/audio';
 
 export interface PhaserGameRef {
   pause: () => void;
@@ -149,6 +150,7 @@ export const PhaserGame = forwardRef<PhaserGameRef, PhaserGameProps>(
       // Cleanup Phaser on unmount
       return () => {
         window.removeEventListener('resize', handleResize);
+        stopStadiumAmbience();
 
         if (sceneRef.current) {
           sceneRef.current = null;

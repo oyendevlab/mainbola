@@ -31,6 +31,8 @@ import {
   Swords,
   Search,
   Target,
+  Radio,
+  Sliders,
 } from 'lucide-react';
 
 export const MatchTab: React.FC = () => {
@@ -41,6 +43,8 @@ export const MatchTab: React.FC = () => {
     recordPvPResult,
     completeScenario,
     toggleCommentaryVoice,
+    toggleBgSound,
+    setBgVolume,
     setActiveTab,
     updateTactics,
     setStartingXI,
@@ -70,6 +74,7 @@ export const MatchTab: React.FC = () => {
   const [activeScenario, setActiveScenario] = useState<ScenarioDefinition | null>(null);
   const [currentMatchSeed] = useState(() => Date.now());
   const [pvpOpponentRating, setPvpOpponentRating] = useState<number | null>(null);
+  const [showAudioControls, setShowAudioControls] = useState(false);
 
   const phaserRef = useRef<PhaserGameRef | null>(null);
 
@@ -649,6 +654,36 @@ export const MatchTab: React.FC = () => {
                   <MicOff className="w-4 h-4 text-slate-500" />
                 )}
               </button>
+
+              {/* Version 0.7.1 Stadium Background Ambience Toggle */}
+              <button
+                onClick={() => toggleBgSound()}
+                className="p-2.5 rounded-xl bg-navy-950 border border-slate-700 hover:border-slate-600 transition cursor-pointer"
+                title={(profile.bgSoundEnabled ?? true) ? 'Matikan Bunyi Latar Stadium' : 'Hidupkan Bunyi Latar Stadium'}
+                aria-label="Toggle Stadium Ambience"
+                data-testid="bg-sound-toggle"
+              >
+                <Radio
+                  className={`w-4 h-4 ${
+                    (profile.bgSoundEnabled ?? true) ? 'text-amber-400' : 'text-slate-500'
+                  }`}
+                />
+              </button>
+
+              {/* Version 0.7.1 Audio Volume Quick Slider Expander */}
+              <button
+                onClick={() => setShowAudioControls((prev) => !prev)}
+                className={`p-2.5 rounded-xl border transition cursor-pointer ${
+                  showAudioControls
+                    ? 'bg-amber-500/20 border-amber-500 text-amber-300'
+                    : 'bg-navy-950 border-slate-700 hover:border-slate-600 text-slate-400'
+                }`}
+                title="Pelarasan Kelantangan Audio Stadium"
+                aria-label="Audio Volume Controls"
+                data-testid="audio-sliders-toggle"
+              >
+                <Sliders className="w-4 h-4" />
+              </button>
             </div>
 
             {/* Speed Buttons: 1x, 2x, 4x */}
@@ -677,6 +712,54 @@ export const MatchTab: React.FC = () => {
               <ChevronRight className="w-3.5 h-3.5" />
             </button>
           </div>
+
+          {/* Version 0.7.1 Stadium Background Volume Quick Slider Panel */}
+          {showAudioControls && (
+            <div className="p-3 bg-navy-950/95 border border-amber-500/30 rounded-2xl shadow-xl backdrop-blur space-y-2 animate-in fade-in slide-in-from-top-1 duration-200">
+              <div className="flex items-center justify-between text-xs">
+                <div className="flex items-center gap-1.5 font-bold text-slate-200">
+                  <Radio className="w-3.5 h-3.5 text-amber-400" />
+                  <span>Kelantangan Bunyi Latar Stadium</span>
+                </div>
+                <span className="font-mono font-bold text-amber-400">
+                  {(profile.bgSoundEnabled ?? true) ? `${profile.bgVolume ?? 40}%` : 'Dimatikan'}
+                </span>
+              </div>
+              <div className="flex items-center gap-3">
+                <input
+                  type="range"
+                  min="0"
+                  max="100"
+                  step="5"
+                  disabled={!(profile.bgSoundEnabled ?? true)}
+                  value={profile.bgVolume ?? 40}
+                  onChange={(e) => setBgVolume(Number(e.target.value))}
+                  className="w-full accent-amber-500 cursor-pointer h-1.5 bg-slate-800 rounded-lg disabled:opacity-40"
+                />
+              </div>
+              <div className="flex gap-1.5 pt-1">
+                {[
+                  { label: 'Senyap (0%)', val: 0 },
+                  { label: '25%', val: 25 },
+                  { label: '50%', val: 50 },
+                  { label: '100%', val: 100 },
+                ].map((preset) => (
+                  <button
+                    key={preset.val}
+                    disabled={!(profile.bgSoundEnabled ?? true)}
+                    onClick={() => setBgVolume(preset.val)}
+                    className={`flex-1 py-1 rounded text-[10px] font-bold border transition cursor-pointer disabled:opacity-40 ${
+                      (profile.bgVolume ?? 40) === preset.val
+                        ? 'bg-amber-500/20 text-amber-300 border-amber-500/50'
+                        : 'bg-navy-900 text-slate-400 border-slate-800 hover:border-slate-700'
+                    }`}
+                  >
+                    {preset.label}
+                  </button>
+                ))}
+              </div>
+            </div>
+          )}
         </div>
       )}
 

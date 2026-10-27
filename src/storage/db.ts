@@ -257,6 +257,8 @@ export async function getProfile(): Promise<ManagerProfile | null> {
       ...profile,
       commentaryVoiceEnabled: profile.commentaryVoiceEnabled ?? true,
       commentaryLanguage: profile.commentaryLanguage ?? 'ms',
+      bgSoundEnabled: profile.bgSoundEnabled ?? true,
+      bgVolume: profile.bgVolume ?? 40,
     };
   } catch (err) {
     console.error('[IndexedDB] getProfile error:', err);

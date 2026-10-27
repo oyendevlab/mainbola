@@ -64,6 +64,8 @@ describe('IndexedDB Persistence Layer (db.ts)', () => {
     replaySpeed: 2,
     commentaryVoiceEnabled: true,
     commentaryLanguage: 'ms',
+    bgSoundEnabled: true,
+    bgVolume: 40,
   };
 
   const dummyMatch: MatchResult = {

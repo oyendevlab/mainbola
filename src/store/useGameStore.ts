@@ -58,7 +58,7 @@ import {
   generateTransferMarket,
 } from '../engine/transfers';
 import { validateSquadSelection } from '../types/formations';
-import { setSoundEnabled } from '../engine/audio';
+import { setSoundEnabled, setBgSoundEnabled, setBgVolume as setEngineBgVolume } from '../engine/audio';
 import { evaluateUnlockedTrophies } from '../engine/trophies';
 import {
   calculateGateReceipts,
@@ -83,6 +83,8 @@ export const DEFAULT_PROFILE: ManagerProfile = {
   experienceLevel: 1,
   soundEnabled: true,
   replaySpeed: 1,
+  bgSoundEnabled: true,
+  bgVolume: 40,
 };
 
 export interface GameState {
@@ -153,6 +155,10 @@ export interface GameState {
   toggleCommentaryVoice: (enabled?: boolean) => Promise<void>;
   setCommentaryLanguage: (language: 'ms' | 'en') => Promise<void>;
 
+  // Version 0.7.1 Stadium Background Audio Actions
+  toggleBgSound: (enabled?: boolean) => Promise<void>;
+  setBgVolume: (volume: number) => Promise<void>;
+
   // Phase 4 Trophy & Season Awards
   claimLeaguePrize: () => Promise<{ prize: number; success: boolean; message: string }>;
   startNewLeagueSeason: () => Promise<League | null>;
@@ -209,6 +215,8 @@ export const useGameStore = create<GameState>((set, get) => ({
       }
 
       setSoundEnabled(profile.soundEnabled ?? true);
+      setBgSoundEnabled(profile.bgSoundEnabled ?? true);
+      setEngineBgVolume((profile.bgVolume ?? 40) / 100);
 
       let market = savedMarket;
       if (!market || market.length === 0) {
@@ -489,6 +497,12 @@ export const useGameStore = create<GameState>((set, get) => ({
     };
     if (updates.soundEnabled !== undefined) {
       setSoundEnabled(updates.soundEnabled);
+    }
+    if (updates.bgSoundEnabled !== undefined) {
+      setBgSoundEnabled(updates.bgSoundEnabled);
+    }
+    if (updates.bgVolume !== undefined) {
+      setEngineBgVolume(updates.bgVolume / 100);
     }
     await saveProfile(updated);
     set({ profile: updated });
@@ -1203,5 +1217,17 @@ export const useGameStore = create<GameState>((set, get) => ({
     };
     await saveProfile(updatedProfile);
     set({ profile: updatedProfile });
+  },
+
+  toggleBgSound: async (enabled?: boolean) => {
+    const { profile, updateProfile } = get();
+    const next = enabled !== undefined ? enabled : !(profile.bgSoundEnabled ?? true);
+    await updateProfile({ bgSoundEnabled: next });
+  },
+
+  setBgVolume: async (volume: number) => {
+    const { updateProfile } = get();
+    const clamped = Math.max(0, Math.min(100, Math.round(volume)));
+    await updateProfile({ bgVolume: clamped });
   },
 }));

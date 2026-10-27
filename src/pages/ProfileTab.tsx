@@ -20,6 +20,7 @@ import {
   Mic,
   MicOff,
   Languages,
+  Radio,
 } from 'lucide-react';
 import { getAllTrophies } from '../engine/trophies';
 
@@ -30,6 +31,8 @@ export const ProfileTab: React.FC = () => {
     updateProfile,
     toggleCommentaryVoice,
     setCommentaryLanguage,
+    toggleBgSound,
+    setBgVolume,
     resetGame,
     matchHistory,
     unlockedTrophies,
@@ -302,8 +305,8 @@ export const ProfileTab: React.FC = () => {
               <VolumeX className="w-5 h-5 text-slate-500" />
             )}
             <div>
-              <div className="text-sm font-semibold text-white">Audio &amp; Match Whistle</div>
-              <div className="text-[11px] text-slate-400">Sound effects during 2D pixel replays</div>
+              <div className="text-sm font-semibold text-white">Kesan Audio Perlawanan (SFX)</div>
+              <div className="text-[11px] text-slate-400">Kesan bunyi sepakan, wisel pengadil, sorakan dan tackle</div>
             </div>
           </div>
           <button
@@ -318,6 +321,77 @@ export const ProfileTab: React.FC = () => {
               }`}
             />
           </button>
+        </div>
+
+        {/* Version 0.7.1 Stadium Background Crowd Audio Toggle & Volume */}
+        <div className="p-3 rounded-xl bg-navy-950 border border-slate-800 space-y-3">
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-3">
+              <Radio
+                className={`w-5 h-5 ${
+                  (profile.bgSoundEnabled ?? true) ? 'text-amber-400' : 'text-slate-500'
+                }`}
+              />
+              <div>
+                <div className="text-sm font-semibold text-white">Suasana Latar Stadium (Ambience)</div>
+                <div className="text-[11px] text-slate-400">Gemuruh penonton &amp; sorakan stadium berterusan</div>
+              </div>
+            </div>
+            <button
+              onClick={() => toggleBgSound()}
+              data-testid="profile-bg-sound-toggle"
+              className={`w-12 h-6 rounded-full transition-colors relative cursor-pointer ${
+                (profile.bgSoundEnabled ?? true) ? 'bg-amber-500' : 'bg-slate-700'
+              }`}
+            >
+              <div
+                className={`w-5 h-5 rounded-full bg-white transition-transform transform absolute top-0.5 left-0.5 ${
+                  (profile.bgSoundEnabled ?? true) ? 'translate-x-6' : 'translate-x-0'
+                }`}
+              />
+            </button>
+          </div>
+
+          {/* Volume Slider & Presets */}
+          {(profile.bgSoundEnabled ?? true) && (
+            <div className="pt-2 border-t border-slate-800/80 space-y-2">
+              <div className="flex items-center justify-between text-xs">
+                <span className="text-slate-400 font-medium">Kelantangan Bunyi Latar:</span>
+                <span className="font-mono font-bold text-amber-400">
+                  {profile.bgVolume ?? 40}%
+                </span>
+              </div>
+              <input
+                type="range"
+                min="0"
+                max="100"
+                step="5"
+                value={profile.bgVolume ?? 40}
+                onChange={(e) => setBgVolume(Number(e.target.value))}
+                className="w-full accent-amber-500 cursor-pointer h-1.5 bg-slate-800 rounded-lg"
+              />
+              <div className="flex gap-1.5 pt-1">
+                {[
+                  { label: 'Senyap (0%)', val: 0 },
+                  { label: 'Rendah (20%)', val: 20 },
+                  { label: 'Sederhana (50%)', val: 50 },
+                  { label: 'Kuat (100%)', val: 100 },
+                ].map((preset) => (
+                  <button
+                    key={preset.val}
+                    onClick={() => setBgVolume(preset.val)}
+                    className={`flex-1 py-1 rounded text-[10px] font-bold border transition cursor-pointer ${
+                      (profile.bgVolume ?? 40) === preset.val
+                        ? 'bg-amber-500/20 text-amber-300 border-amber-500/50'
+                        : 'bg-navy-900 text-slate-400 border-slate-800 hover:border-slate-700'
+                    }`}
+                  >
+                    {preset.label}
+                  </button>
+                ))}
+              </div>
+            </div>
+          )}
         </div>
 
         {/* Version 0.7.0 Web Speech Commentary Voice Toggle */}

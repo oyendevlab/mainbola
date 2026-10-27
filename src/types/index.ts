@@ -175,6 +175,8 @@ export interface ManagerProfile {
   replaySpeed: 1 | 2 | 4;
   commentaryVoiceEnabled?: boolean; // Version 0.7.0 Web Speech API toggle
   commentaryLanguage?: 'ms' | 'en'; // Version 0.7.0 language preference
+  bgSoundEnabled?: boolean; // Version 0.7.1 Stadium background audio toggle
+  bgVolume?: number; // Version 0.7.1 Stadium background volume (0 - 100)
 }
 
 // Player Progression & Training

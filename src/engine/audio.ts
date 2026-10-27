@@ -11,6 +11,16 @@ export class SoundEngine {
   private enabled: boolean = true;
   private masterGainNode: GainNode | null = null;
 
+  // Background stadium ambience state (v0.7.1)
+  private bgEnabled: boolean = true;
+  private bgVolume: number = 0.4; // Normalized 0.0 to 1.0
+  private bgGainNode: GainNode | null = null;
+  private ambientSource: AudioBufferSourceNode | null = null;
+  private ambientLfo: OscillatorNode | null = null;
+  private ambientDrone1: OscillatorNode | null = null;
+  private ambientDrone2: OscillatorNode | null = null;
+  private isAmbienceActive: boolean = false;
+
   constructor() {
     // AudioContext is lazily initialized on first interaction
   }
@@ -20,6 +30,11 @@ export class SoundEngine {
    */
   public setSoundEnabled(enabled: boolean): void {
     this.enabled = enabled;
+    if (!enabled && this.isAmbienceActive) {
+      this.updateBgGain();
+    } else if (enabled && this.isAmbienceActive) {
+      this.updateBgGain();
+    }
   }
 
   /**
@@ -30,11 +45,51 @@ export class SoundEngine {
   }
 
   /**
+   * Toggle background stadium crowd ambience.
+   */
+  public setBgSoundEnabled(enabled: boolean): void {
+    this.bgEnabled = enabled;
+    this.updateBgGain();
+  }
+
+  public isBgSoundEnabled(): boolean {
+    return this.bgEnabled;
+  }
+
+  /**
+   * Set background stadium crowd ambience volume (0.0 to 1.0).
+   */
+  public setBgVolume(volume: number): void {
+    this.bgVolume = Math.max(0, Math.min(1, volume));
+    this.updateBgGain();
+  }
+
+  public getBgVolume(): number {
+    return this.bgVolume;
+  }
+
+  /**
+   * Dynamically adjust background gain node value based on mute and volume flags.
+   */
+  private updateBgGain(): void {
+    if (!this.bgGainNode || !this.ctx) return;
+    const effectiveGain = this.enabled && this.bgEnabled ? 0.2 * this.bgVolume : 0.0001;
+    try {
+      this.bgGainNode.gain.cancelScheduledValues(this.ctx.currentTime);
+      this.bgGainNode.gain.linearRampToValueAtTime(effectiveGain, this.ctx.currentTime + 0.1);
+    } catch {
+      this.bgGainNode.gain.value = effectiveGain;
+    }
+  }
+
+  /**
    * Inject or override AudioContext (useful for testing or custom host contexts).
    */
   public setContext(context: AudioContext | null): void {
+    this.stopStadiumAmbience();
     this.ctx = context;
     this.masterGainNode = null;
+    this.bgGainNode = null;
   }
 
   /**
@@ -348,6 +403,140 @@ export class SoundEngine {
     snapOsc.start(now);
     snapOsc.stop(now + 0.05);
   }
+
+  /**
+   * Start looping procedural background stadium crowd ambience.
+   * Generates dual-filtered pink noise swells and subtle stadium drone chords.
+   */
+  public startStadiumAmbience(): void {
+    if (this.isAmbienceActive) return;
+    const ctx = this.getContext();
+    if (!ctx) return;
+    this.resumeContext(ctx);
+
+    try {
+      const master = this.getMasterGain(ctx);
+      const now = ctx.currentTime;
+
+      // Dedicated Background Gain Bus
+      const bgGain = ctx.createGain();
+      const initialGain = this.enabled && this.bgEnabled ? 0.2 * this.bgVolume : 0.0001;
+      bgGain.gain.setValueAtTime(0.0001, now);
+      bgGain.gain.linearRampToValueAtTime(initialGain, now + 0.5);
+      bgGain.connect(master);
+      this.bgGainNode = bgGain;
+
+      // 1. Dual-Filtered Crowd Noise Loop (4-second buffer)
+      const noiseDuration = 4.0;
+      const noiseBuffer = this.createNoiseBuffer(ctx, noiseDuration);
+      const noiseSource = ctx.createBufferSource();
+      noiseSource.buffer = noiseBuffer;
+      noiseSource.loop = true;
+
+      const bandpass1 = ctx.createBiquadFilter();
+      bandpass1.type = 'bandpass';
+      bandpass1.frequency.setValueAtTime(480, now);
+      bandpass1.Q.setValueAtTime(1.2, now);
+
+      const bandpass2 = ctx.createBiquadFilter();
+      bandpass2.type = 'lowpass';
+      bandpass2.frequency.setValueAtTime(950, now);
+      bandpass2.Q.setValueAtTime(0.8, now);
+
+      // LFO for natural crowd chanting/swelling wave
+      const lfo = ctx.createOscillator();
+      const lfoGain = ctx.createGain();
+      lfo.type = 'sine';
+      lfo.frequency.setValueAtTime(0.2, now); // ~5-second wave cycle
+      lfoGain.gain.setValueAtTime(120, now);
+      lfo.connect(lfoGain);
+      lfoGain.connect(bandpass1.frequency);
+
+      noiseSource.connect(bandpass1);
+      bandpass1.connect(bandpass2);
+      bandpass2.connect(bgGain);
+
+      // 2. Subtle distant harmonic stadium drone (retro crowd tone)
+      const drone1 = ctx.createOscillator();
+      const droneGain1 = ctx.createGain();
+      drone1.type = 'triangle';
+      drone1.frequency.setValueAtTime(110, now); // A2 low warmth
+      droneGain1.gain.setValueAtTime(0.02, now);
+      drone1.connect(droneGain1);
+      droneGain1.connect(bgGain);
+
+      const drone2 = ctx.createOscillator();
+      const droneGain2 = ctx.createGain();
+      drone2.type = 'sine';
+      drone2.frequency.setValueAtTime(164.81, now); // E3 fifth harmony
+      droneGain2.gain.setValueAtTime(0.015, now);
+      drone2.connect(droneGain2);
+      droneGain2.connect(bgGain);
+
+      noiseSource.start(now);
+      lfo.start(now);
+      drone1.start(now);
+      drone2.start(now);
+
+      this.ambientSource = noiseSource;
+      this.ambientLfo = lfo;
+      this.ambientDrone1 = drone1;
+      this.ambientDrone2 = drone2;
+      this.isAmbienceActive = true;
+    } catch {
+      // Graceful fallback in environments without full Web Audio oscillator support
+    }
+  }
+
+  /**
+   * Stop background stadium crowd ambience.
+   */
+  public stopStadiumAmbience(): void {
+    if (!this.isAmbienceActive) return;
+    this.isAmbienceActive = false;
+
+    if (this.bgGainNode && this.ctx) {
+      try {
+        const now = this.ctx.currentTime;
+        this.bgGainNode.gain.cancelScheduledValues(now);
+        this.bgGainNode.gain.linearRampToValueAtTime(0.0001, now + 0.2);
+      } catch {
+        // Fallback
+      }
+    }
+
+    const cleanup = () => {
+      try {
+        this.ambientSource?.stop();
+        this.ambientSource?.disconnect();
+        this.ambientLfo?.stop();
+        this.ambientLfo?.disconnect();
+        this.ambientDrone1?.stop();
+        this.ambientDrone1?.disconnect();
+        this.ambientDrone2?.stop();
+        this.ambientDrone2?.disconnect();
+        this.bgGainNode?.disconnect();
+      } catch {
+        // Ignore errors during teardown
+      }
+      this.ambientSource = null;
+      this.ambientLfo = null;
+      this.ambientDrone1 = null;
+      this.ambientDrone2 = null;
+      this.bgGainNode = null;
+      this.isAmbienceActive = false;
+    };
+
+    if (this.ctx) {
+      setTimeout(cleanup, 220);
+    } else {
+      cleanup();
+    }
+  }
+
+  public isAmbienceRunning(): boolean {
+    return this.isAmbienceActive;
+  }
 }
 
 // Singleton instance
@@ -372,4 +561,28 @@ export const playTackle = (): void => {
 
 export const setSoundEnabled = (enabled: boolean): void => {
   soundEngine.setSoundEnabled(enabled);
+};
+
+export const startStadiumAmbience = (): void => {
+  soundEngine.startStadiumAmbience();
+};
+
+export const stopStadiumAmbience = (): void => {
+  soundEngine.stopStadiumAmbience();
+};
+
+export const setBgVolume = (volume: number): void => {
+  soundEngine.setBgVolume(volume);
+};
+
+export const getBgVolume = (): number => {
+  return soundEngine.getBgVolume();
+};
+
+export const setBgSoundEnabled = (enabled: boolean): void => {
+  soundEngine.setBgSoundEnabled(enabled);
+};
+
+export const isBgSoundEnabled = (): boolean => {
+  return soundEngine.isBgSoundEnabled();
 };

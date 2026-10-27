@@ -1,7 +1,14 @@
 import Phaser from 'phaser';
 import { FormationType, MatchEvent, Player, PlayerPosition } from '../types';
 import { FORMATION_CONFIGS } from '../types/formations';
-import { playWhistle, playKick, playCheer, playTackle } from '../engine/audio';
+import {
+  playWhistle,
+  playKick,
+  playCheer,
+  playTackle,
+  startStadiumAmbience,
+  stopStadiumAmbience,
+} from '../engine/audio';
 
 export interface TeamVisualInfo {
   id: string;
@@ -159,7 +166,10 @@ export class MatchScene extends Phaser.Scene {
     // 6. Setup dynamic weather effects (rain particles or night lights)
     this.setupWeatherEffects();
 
-    // 7. Begin event playback if events exist and not paused
+    // 7. Start ambient stadium crowd background audio (v0.7.1)
+    startStadiumAmbience();
+
+    // 8. Begin event playback if events exist and not paused
     if (!this.isPausedState) {
       this.scheduleNextEvent(600);
     }
@@ -1255,6 +1265,9 @@ export class MatchScene extends Phaser.Scene {
     this.ballSprite.setPosition(HALFWAY_X, CENTER_Y);
     this.ballShadow.setPosition(HALFWAY_X, CENTER_Y + 3);
 
+    // Reset both teams cleanly to base tactical shape
+    this.resetPlayersToFormation(500 / this.speedMultiplier);
+
     // Whistle pop text
     this.showFloatingText('WHISTLE! KICKOFF', HALFWAY_X, CENTER_Y - 20, '#FACC15');
     this.time.delayedCall(600 / this.speedMultiplier, onComplete);
@@ -1294,6 +1307,9 @@ export class MatchScene extends Phaser.Scene {
       });
       this.activeTweens.push(tweenRec);
     }
+
+    // Dynamic Team Formations: attacking forward push, defensive block, active presser
+    this.updateTacticalFormations(toX, toY, targetTeam, duration, false, receiver?.id);
 
     // Ball Tween with slight parabolic scale arc to simulate flight
     const tweenBall = this.tweens.add({
@@ -1345,6 +1361,15 @@ export class MatchScene extends Phaser.Scene {
 
     this.ballSprite.setPosition(fromX, fromY);
     this.ballShadow.setPosition(fromX, fromY + 3);
+
+    // Dynamic Team Formations: attacking team crashes box, defending team packs box
+    this.updateTacticalFormations(
+      targetGoalX,
+      targetGoalY,
+      isHomeShooting ? 'home' : 'away',
+      duration,
+      true
+    );
 
     // Find defending goalkeeper
     const defendingTeam = isHomeShooting ? 'away' : 'home';
@@ -1507,6 +1532,11 @@ export class MatchScene extends Phaser.Scene {
     // Slight ball squirt
     const squirtX = x + Phaser.Math.Between(-15, 15);
     const squirtY = y + Phaser.Math.Between(-15, 15);
+
+    // Dynamic Team Transition: counter-attack push & recovery scramble
+    const transitionTeam = squirtX > HALFWAY_X ? 'home' : 'away';
+    this.updateTacticalFormations(squirtX, squirtY, transitionTeam, duration, false);
+
     const tweenBall = this.tweens.add({
       targets: [this.ballSprite, this.ballShadow],
       x: squirtX,
@@ -1643,6 +1673,7 @@ export class MatchScene extends Phaser.Scene {
 
   private handleMatchEnd(): void {
     this.isFinished = true;
+    stopStadiumAmbience();
     this.hudTickerText.setText(`Full Time! Final Score: ${this.homeScore} - ${this.awayScore}`);
     this.showFloatingText('★ MATCH FINISHED ★', HALFWAY_X, CENTER_Y - 25, '#FACC15');
     this.callbacks.onMatchEnd?.();
@@ -1654,6 +1685,158 @@ export class MatchScene extends Phaser.Scene {
     this.hudScoreText?.setText(
       `${homeNameShort}  ${this.homeScore} - ${this.awayScore}  ${awayNameShort}`
     );
+  }
+
+  /**
+   * Smoothly reset all 22 players to their base formation coordinates
+   */
+  private resetPlayersToFormation(duration: number = 450): void {
+    for (const p of this.players) {
+      if (!p.container || !p.container.active) continue;
+      this.tweens.add({
+        targets: p.container,
+        x: p.baseX,
+        y: p.baseY,
+        duration,
+        ease: 'Quad.easeOut',
+        onComplete: () => {
+          p.sprite.setAngle(0);
+          p.sprite.setY(0);
+        },
+      });
+    }
+  }
+
+  /**
+   * Updates all 22 players with authentic tactical formations, attacking runs,
+   * compact defensive blocks, ball-oriented team shifting, and active pressing.
+   */
+  private updateTacticalFormations(
+    targetBallX: number,
+    targetBallY: number,
+    attackingTeam: 'home' | 'away',
+    duration: number,
+    isShootingPhase: boolean = false,
+    receivingPlayerId?: string
+  ): void {
+    const defendingTeam = attackingTeam === 'home' ? 'away' : 'home';
+    const presser = this.findNearestPlayer(targetBallX, targetBallY, defendingTeam);
+
+    for (const p of this.players) {
+      if (!p.container || !p.container.active) continue;
+      if (receivingPlayerId && p.id === receivingPlayerId) continue;
+
+      let targetX = p.baseX;
+      let targetY = p.baseY;
+
+      if (p.isGK) {
+        if (p.team === defendingTeam) {
+          // Defending GK guards the goal mouth and shifts on the angle
+          targetX = defendingTeam === 'home' ? PITCH_LEFT + 6 : PITCH_RIGHT - 6;
+          targetY = Phaser.Math.Clamp(
+            CENTER_Y + (targetBallY - CENTER_Y) * 0.32,
+            CENTER_Y - 14,
+            CENTER_Y + 14
+          );
+        } else {
+          // Attacking GK steps up to act as a sweeper keeper support
+          const pushX = attackingTeam === 'home' ? 18 : -18;
+          targetX = p.baseX + pushX;
+          targetY = CENTER_Y + (targetBallY - CENTER_Y) * 0.15;
+        }
+      } else if (p.team === attackingTeam) {
+        // ==========================================
+        // ATTACKING TEAM MOVEMENT
+        // ==========================================
+        const forwardDirection = attackingTeam === 'home' ? 1 : -1;
+        const flankDistance = Math.abs(p.baseY - CENTER_Y);
+
+        if (p.role === 'ATT') {
+          if (isShootingPhase) {
+            // Surge towards penalty box / 6-yard area for tap-in or rebound
+            const boxGoalX = attackingTeam === 'home' ? PITCH_RIGHT - 28 : PITCH_LEFT + 28;
+            targetX = boxGoalX + forwardDirection * (Math.random() * 15 - 8);
+            targetY = targetBallY + (p.baseY > CENTER_Y ? 12 : -12);
+          } else {
+            // Forward runs into space / channels
+            const pushX = forwardDirection * 48;
+            const lateralShift = (targetBallY - p.baseY) * 0.28;
+            targetX = p.baseX + pushX + (targetBallX - p.baseX) * 0.30;
+            targetY = p.baseY + lateralShift;
+          }
+        } else if (p.role === 'MID') {
+          // Midfielders support the play from behind the ball and offer passing triangles
+          const pushX = forwardDirection * 34;
+          const lateralShift = (targetBallY - p.baseY) * 0.35;
+          targetX = p.baseX + pushX + (targetBallX - p.baseX) * 0.25;
+          targetY = p.baseY + lateralShift;
+        } else {
+          // Defenders push up high to compress team length (high defensive line)
+          const pushX = forwardDirection * 28;
+          targetX = p.baseX + pushX;
+          // Fullback overlap if the ball is on their flank
+          if (flankDistance > 45 && Math.sign(p.baseY - CENTER_Y) === Math.sign(targetBallY - CENTER_Y)) {
+            targetX += forwardDirection * 20;
+          }
+          targetY = p.baseY + (targetBallY - p.baseY) * 0.18;
+        }
+      } else {
+        // ==========================================
+        // DEFENDING TEAM MOVEMENT
+        // ==========================================
+        if (p === presser) {
+          // The closest outfield defender actively presses and closes down the ball carrier!
+          const pressOffsetX = attackingTeam === 'home' ? 18 : -18;
+          targetX = targetBallX + pressOffsetX;
+          targetY = targetBallY + (p.baseY > CENTER_Y ? -8 : 8);
+        } else {
+          const dropDirection = defendingTeam === 'home' ? -1 : 1;
+
+          if (p.role === 'DEF') {
+            // Deep compact defensive line shielding the 18-yard box
+            const dropX = dropDirection * 28;
+            targetX = p.baseX + dropX;
+            // Compact towards center / ball side
+            targetY = CENTER_Y + (p.baseY - CENTER_Y) * 0.65 + (targetBallY - CENTER_Y) * 0.22;
+          } else if (p.role === 'MID') {
+            // Midfield line forms a tight defensive screen in front of defenders
+            const dropX = dropDirection * 32;
+            targetX = p.baseX + dropX;
+            targetY = CENTER_Y + (p.baseY - CENTER_Y) * 0.70 + (targetBallY - CENTER_Y) * 0.28;
+          } else {
+            // Strikers drop to near the halfway line as target outlet for counter-attacks
+            targetX = (defendingTeam === 'home' ? PITCH_LEFT + 150 : PITCH_RIGHT - 150);
+            targetY = p.baseY + (targetBallY - p.baseY) * 0.15;
+          }
+        }
+      }
+
+      // Keep within pitch boundaries
+      targetX = Phaser.Math.Clamp(targetX, PITCH_LEFT + 8, PITCH_RIGHT - 8);
+      targetY = Phaser.Math.Clamp(targetY, PITCH_TOP + 8, PITCH_BOTTOM - 8);
+
+      const dx = targetX - p.container.x;
+      const dy = targetY - p.container.y;
+      const distSq = dx * dx + dy * dy;
+
+      if (distSq > 16) {
+        // Dynamic running stride & tilt
+        const moveTween = this.tweens.add({
+          targets: p.container,
+          x: targetX,
+          y: targetY,
+          duration: Math.max(120, duration * 0.9),
+          ease: 'Quad.easeOut',
+          onStart: () => {
+            p.sprite.setAngle(dx > 0 ? 4 : -4);
+          },
+          onComplete: () => {
+            p.sprite.setAngle(0);
+          },
+        });
+        this.activeTweens.push(moveTween);
+      }
+    }
   }
 
   private findNearestPlayer(x: number, y: number, team: 'home' | 'away'): PitchPlayer | null {
@@ -1681,6 +1864,7 @@ export class MatchScene extends Phaser.Scene {
 
   public pause(): void {
     this.isPausedState = true;
+    stopStadiumAmbience();
     for (const tw of this.activeTweens) {
       if (tw.isPlaying()) tw.pause();
     }
@@ -1692,6 +1876,7 @@ export class MatchScene extends Phaser.Scene {
   public resume(): void {
     if (!this.isPausedState) return;
     this.isPausedState = false;
+    startStadiumAmbience();
     for (const tw of this.activeTweens) {
       if (tw.isPaused()) tw.resume();
     }
@@ -1703,6 +1888,7 @@ export class MatchScene extends Phaser.Scene {
   }
 
   public restart(): void {
+    startStadiumAmbience();
     // Stop all running tweens
     for (const tw of this.activeTweens) {
       tw.stop();
@@ -1765,5 +1951,25 @@ export class MatchScene extends Phaser.Scene {
 
   public getScores(): { homeScore: number; awayScore: number } {
     return { homeScore: this.homeScore, awayScore: this.awayScore };
+  }
+
+  public shutdown(): void {
+    stopStadiumAmbience();
+    for (const tw of this.activeTweens) {
+      if (tw.isPlaying()) tw.stop();
+    }
+    this.activeTweens = [];
+    if (this.nextEventTimer) {
+      this.nextEventTimer.destroy();
+      this.nextEventTimer = null;
+    }
+    if (this.ambientTimer) {
+      this.ambientTimer.destroy();
+      this.ambientTimer = null;
+    }
+    if (this.weatherTimer) {
+      this.weatherTimer.destroy();
+      this.weatherTimer = undefined;
+    }
   }
 }
