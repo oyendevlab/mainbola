@@ -298,6 +298,28 @@
 
 ---
 
+## 🚀 Version 0.7.2: Active Match Realism & Procedural Pixel Animation Engine (Completed)
+
+- [x] **1. Algoritma AI Steering Behaviors & Formasi Dinamik (`src/renderer/tactics/aiSteering.ts`)**:
+  - [x] **Flocking / Separation (Boids)**: Mengelakkan pemain daripada bertembung atau bertindih (repulsion vector, jarak minimum 18px).
+  - [x] **Garisan Perangkap Ofsaid Dinamik (`calculateOffsideLine`)**: Pemain pertahanan mengekalkan garisan kompak mengikut posisi bola dan garisan pemain lawan.
+  - [x] **Larian Menembusi Pertahanan (Penetrating Runs)**: Penyerang membuat larian tajam melepasi garisan pertahanan semasa fasa serangan aktif.
+  - [x] **Tekanan Agresif (Primary Presser Designated)**: Pemain pertahanan/tengah terdekat sahaja keluar menekan pembawa bola, pemain lain mengekalkan blok padat.
+  - [x] **State Machine Taktikal Pemain (`PlayerTacticalState`)**: `'IDLE' | 'JOGGING' | 'RUNNING' | 'MAKING_RUN' | 'PRESSING' | 'COVERING' | 'KICKING' | 'SLIDING' | 'DIVING'`.
+
+- [x] **2. Enjin Seni Piksel Procedural Multi-Frame (Inspirasi `claude-pxl`)**:
+  - [x] **Tekstur Sprite Berbilang Bingkai**: Dijana secara dinamik atas Canvas 16x16 tanpa aset luar (`_stand`, `_run1`, `_run2`, `_kick`, `_slide`, `_dive`).
+  - [x] **Kitaran Larian Berayun (Running Stride Cycle)**: Pertukaran bingkai `_run1` dan `_run2` mengikut jarak langkah kaki semasa pemain berlari.
+  - [x] **Animasi Rejahan Gelongsor (Slide Tackle Pose)**: Pemain meluncur dengan tekstur `_slide` dan percikan rumput padang (`turf_grass_pixel`).
+  - [x] **Animasi Rembatan & Terjahan Penjaga Gol (Shot & Dive Animation)**: Penyerang mengangkat kaki (`_kick`), dan penjaga gol menyelam (`_dive`) ke arah sudut bola.
+
+- [x] **3. Ujian & Jaminan Kualiti**:
+  - [x] 192/192 unit tests lulus (23 test suites) termasuk ujian khusus steering behaviors.
+  - [x] Ujian Playwright E2E browser lulus tanpa sebarang ralat.
+  - [x] Kompilasi TypeScript dan binaan PWA Vite sifar ralat.
+
+---
+
 ## 🔮 Version 0.8.0: Multi-League Pyramid, International Cups, Cloud Backup, & Advanced Sound Design (Planned)
 
 - [ ] **1. Sistem Piramid Liga Berbilang Tahap (Multi-Tier Pyramid & Promotion/Relegation)**:

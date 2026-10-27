@@ -9,6 +9,12 @@ import {
   startStadiumAmbience,
   stopStadiumAmbience,
 } from '../engine/audio';
+import {
+  computeTeamTacticalTarget,
+  TacticalPlayerInput,
+  TacticalContext,
+  PlayerTacticalState,
+} from './tactics/aiSteering';
 
 export interface TeamVisualInfo {
   id: string;
@@ -52,6 +58,10 @@ interface PitchPlayer {
   sprite: Phaser.GameObjects.Sprite;
   shadow: Phaser.GameObjects.Sprite;
   container: Phaser.GameObjects.Container;
+  texturePrefix: string;
+  tacticalState?: PlayerTacticalState;
+  animFrame?: number;
+  isMoving?: boolean;
 }
 
 // Retro Pitch Constants
@@ -366,28 +376,28 @@ export class MatchScene extends Phaser.Scene {
       ? this.awayTeam.awaySecondaryColor || this.awayTeam.primaryColor
       : this.awayTeam.secondaryColor;
 
-    this.createPlayerTexture(
+    this.createTeamTextures(
       'player_home',
       this.homeTeam.primaryColor,
       this.homeTeam.secondaryColor,
       false,
       this.homeTeam.kitPattern || 'solid'
     );
-    this.createPlayerTexture(
+    this.createTeamTextures(
       'player_home_gk',
       '#E4F123', // Bright Neon Yellow
       '#1E293B',
       true,
       'solid'
     );
-    this.createPlayerTexture(
+    this.createTeamTextures(
       'player_away',
       awayPrimary,
       awaySecondary,
       false,
       this.awayTeam.kitPattern || 'solid'
     );
-    this.createPlayerTexture(
+    this.createTeamTextures(
       'player_away_gk',
       '#FF6B35', // Bright Neon Orange
       '#1E293B',
@@ -412,17 +422,54 @@ export class MatchScene extends Phaser.Scene {
       ctx.fillRect(0, 0, 3, 3);
       confettiCanvas.refresh();
     }
+
+    // 7. Turf Grass Particle for slide tackles (2x2)
+    const turfCanvas = this.textures.createCanvas('turf_grass_pixel', 2, 2);
+    if (turfCanvas) {
+      const ctx = turfCanvas.context;
+      ctx.fillStyle = '#22C55E';
+      ctx.fillRect(0, 0, 2, 2);
+      turfCanvas.refresh();
+    }
   }
 
   /**
-   * Programmatically paints a 16x16 pixel player sprite.
+   * Generates a complete procedural multi-frame sprite suite for a team (claude-pxl inspiration).
    */
-  private createPlayerTexture(
-    key: string,
+  private createTeamTextures(
+    prefix: string,
     shirtColor: string,
     shortsColor: string,
     isGK: boolean,
     pattern: 'solid' | 'stripes' | 'hoops' | 'half' = 'solid'
+  ): void {
+    // 1. Stand / Neutral ready frame (also aliased as base prefix)
+    this.createPlayerTextureVariant(prefix, shirtColor, shortsColor, isGK, pattern, 'stand');
+    this.createPlayerTextureVariant(`${prefix}_stand`, shirtColor, shortsColor, isGK, pattern, 'stand');
+
+    // 2. Animated Run Frames (stride 1 & 2)
+    this.createPlayerTextureVariant(`${prefix}_run1`, shirtColor, shortsColor, isGK, pattern, 'run1');
+    this.createPlayerTextureVariant(`${prefix}_run2`, shirtColor, shortsColor, isGK, pattern, 'run2');
+
+    // 3. Action poses (kick & slide or dive)
+    this.createPlayerTextureVariant(`${prefix}_kick`, shirtColor, shortsColor, isGK, pattern, 'kick');
+    if (isGK) {
+      this.createPlayerTextureVariant(`${prefix}_dive`, shirtColor, shortsColor, isGK, pattern, 'dive');
+    } else {
+      this.createPlayerTextureVariant(`${prefix}_slide`, shirtColor, shortsColor, isGK, pattern, 'slide');
+    }
+  }
+
+  /**
+   * Programmatically paints a 16x16 pixel player sprite with specific pose.
+   */
+  private createPlayerTextureVariant(
+    key: string,
+    shirtColor: string,
+    shortsColor: string,
+    isGK: boolean,
+    pattern: 'solid' | 'stripes' | 'hoops' | 'half' = 'solid',
+    pose: 'stand' | 'run1' | 'run2' | 'kick' | 'slide' | 'dive' = 'stand'
   ): void {
     const canvas = this.textures.createCanvas(key, 16, 16);
     if (!canvas) return;
@@ -436,70 +483,183 @@ export class MatchScene extends Phaser.Scene {
     const bootColor = '#111827';
     const gloveColor = '#E2E8F0';
 
+    if (pose === 'slide') {
+      // Horizontal sliding tackle pose
+      ctx.fillStyle = hairColor;
+      ctx.fillRect(2, 8, 3, 2);
+      ctx.fillStyle = skinColor;
+      ctx.fillRect(3, 9, 3, 2);
+
+      ctx.fillStyle = shirtColor;
+      ctx.fillRect(5, 10, 5, 3);
+
+      ctx.fillStyle = isGK ? gloveColor : skinColor;
+      ctx.fillRect(2, 11, 2, 1);
+
+      ctx.fillStyle = shortsColor;
+      ctx.fillRect(9, 11, 3, 3);
+
+      ctx.fillStyle = shirtColor;
+      ctx.fillRect(12, 13, 2, 2);
+      ctx.fillStyle = bootColor;
+      ctx.fillRect(14, 13, 2, 2);
+
+      canvas.refresh();
+      return;
+    }
+
+    if (pose === 'dive' && isGK) {
+      // Outstretched diving goalkeeper pose
+      ctx.fillStyle = hairColor;
+      ctx.fillRect(4, 7, 3, 2);
+      ctx.fillStyle = skinColor;
+      ctx.fillRect(5, 8, 3, 2);
+
+      ctx.fillStyle = shirtColor;
+      ctx.fillRect(7, 7, 5, 4);
+
+      ctx.fillStyle = shirtColor;
+      ctx.fillRect(11, 6, 2, 2);
+      ctx.fillStyle = gloveColor;
+      ctx.fillRect(13, 5, 3, 3);
+
+      ctx.fillStyle = shortsColor;
+      ctx.fillRect(3, 8, 3, 3);
+
+      ctx.fillStyle = shirtColor;
+      ctx.fillRect(1, 9, 2, 2);
+      ctx.fillStyle = bootColor;
+      ctx.fillRect(0, 9, 2, 2);
+
+      canvas.refresh();
+      return;
+    }
+
+    // Upright poses: 'stand', 'run1', 'run2', 'kick'
+    const yBob = pose === 'run1' || pose === 'run2' ? 1 : 0;
+
     // Hair
     ctx.fillStyle = hairColor;
-    ctx.fillRect(6, 1, 4, 1);
-    ctx.fillRect(5, 2, 6, 1);
+    ctx.fillRect(6, 1 + yBob, 4, 1);
+    ctx.fillRect(5, 2 + yBob, 6, 1);
 
     // Face / Skin
     ctx.fillStyle = skinColor;
-    ctx.fillRect(5, 3, 6, 2);
+    ctx.fillRect(5, 3 + yBob, 6, 2);
 
     // Eyes
     ctx.fillStyle = eyeColor;
-    ctx.fillRect(6, 4, 1, 1);
-    ctx.fillRect(9, 4, 1, 1);
+    ctx.fillRect(6, 4 + yBob, 1, 1);
+    ctx.fillRect(9, 4 + yBob, 1, 1);
 
     // Torso / Shirt (Primary Color & Patterns)
     ctx.fillStyle = shirtColor;
-    ctx.fillRect(4, 5, 8, 5);
+    ctx.fillRect(4, 5 + yBob, 8, 5);
 
     if (!isGK && pattern !== 'solid') {
       ctx.fillStyle = shortsColor;
       if (pattern === 'stripes') {
-        // Vertical stripes on torso (x: 5, 7, 9)
-        ctx.fillRect(5, 5, 2, 5);
-        ctx.fillRect(9, 5, 2, 5);
+        ctx.fillRect(5, 5 + yBob, 2, 5);
+        ctx.fillRect(9, 5 + yBob, 2, 5);
       } else if (pattern === 'hoops') {
-        // Horizontal stripes/hoops on torso (y: 6, 8)
-        ctx.fillRect(4, 6, 8, 1);
-        ctx.fillRect(4, 8, 8, 1);
+        ctx.fillRect(4, 6 + yBob, 8, 1);
+        ctx.fillRect(4, 8 + yBob, 8, 1);
       } else if (pattern === 'half') {
-        // Half / Half split on torso
-        ctx.fillRect(8, 5, 4, 5);
+        ctx.fillRect(8, 5 + yBob, 4, 5);
       }
     }
 
-    // Collar / Accent Trim
+    // Collar
     ctx.fillStyle = shortsColor;
-    ctx.fillRect(7, 5, 2, 1);
+    ctx.fillRect(7, 5 + yBob, 2, 1);
 
-    // Sleeves / Arms
-    ctx.fillStyle = shirtColor;
-    ctx.fillRect(3, 6, 1, 2);
-    ctx.fillRect(12, 6, 1, 2);
-
-    // Hands or Goalkeeper Gloves
-    ctx.fillStyle = isGK ? gloveColor : skinColor;
-    ctx.fillRect(3, 8, 1, 2);
-    ctx.fillRect(12, 8, 1, 2);
+    // Arms
+    if (pose === 'run1') {
+      // Left arm back, right arm forward
+      ctx.fillStyle = shirtColor;
+      ctx.fillRect(2, 7 + yBob, 2, 2);
+      ctx.fillRect(12, 5 + yBob, 2, 2);
+      ctx.fillStyle = isGK ? gloveColor : skinColor;
+      ctx.fillRect(2, 9 + yBob, 1, 1);
+      ctx.fillRect(13, 7 + yBob, 1, 1);
+    } else if (pose === 'run2') {
+      // Right arm back, left arm forward
+      ctx.fillStyle = shirtColor;
+      ctx.fillRect(2, 5 + yBob, 2, 2);
+      ctx.fillRect(12, 7 + yBob, 2, 2);
+      ctx.fillStyle = isGK ? gloveColor : skinColor;
+      ctx.fillRect(2, 7 + yBob, 1, 1);
+      ctx.fillRect(13, 9 + yBob, 1, 1);
+    } else if (pose === 'kick') {
+      // Arms out for balance
+      ctx.fillStyle = shirtColor;
+      ctx.fillRect(2, 6 + yBob, 2, 2);
+      ctx.fillRect(12, 6 + yBob, 2, 2);
+      ctx.fillStyle = isGK ? gloveColor : skinColor;
+      ctx.fillRect(1, 7 + yBob, 1, 2);
+      ctx.fillRect(13, 7 + yBob, 1, 2);
+    } else {
+      // Stand
+      ctx.fillStyle = shirtColor;
+      ctx.fillRect(3, 6, 1, 2);
+      ctx.fillRect(12, 6, 1, 2);
+      ctx.fillStyle = isGK ? gloveColor : skinColor;
+      ctx.fillRect(3, 8, 1, 2);
+      ctx.fillRect(12, 8, 1, 2);
+    }
 
     // Shorts
     ctx.fillStyle = shortsColor;
-    ctx.fillRect(4, 10, 8, 3);
-    // Dark divider between legs
+    ctx.fillRect(4, 10 + yBob, 8, 3);
     ctx.fillStyle = '#0F172A';
-    ctx.fillRect(7, 11, 2, 2);
+    ctx.fillRect(7, 11 + yBob, 2, 2);
 
-    // Socks (Team primary color)
-    ctx.fillStyle = shirtColor;
-    ctx.fillRect(5, 13, 2, 2);
-    ctx.fillRect(9, 13, 2, 2);
+    // Legs & Boots
+    if (pose === 'run1') {
+      // Left leg forward/down
+      ctx.fillStyle = shirtColor;
+      ctx.fillRect(4, 13 + yBob, 2, 2);
+      ctx.fillStyle = bootColor;
+      ctx.fillRect(4, 15, 2, 1);
 
-    // Boots
-    ctx.fillStyle = bootColor;
-    ctx.fillRect(5, 15, 2, 1);
-    ctx.fillRect(9, 15, 2, 1);
+      // Right leg trailing back
+      ctx.fillStyle = shirtColor;
+      ctx.fillRect(10, 12 + yBob, 2, 2);
+      ctx.fillStyle = bootColor;
+      ctx.fillRect(11, 13 + yBob, 2, 1);
+    } else if (pose === 'run2') {
+      // Left leg trailing back
+      ctx.fillStyle = shirtColor;
+      ctx.fillRect(4, 12 + yBob, 2, 2);
+      ctx.fillStyle = bootColor;
+      ctx.fillRect(3, 13 + yBob, 2, 1);
+
+      // Right leg forward/down
+      ctx.fillStyle = shirtColor;
+      ctx.fillRect(10, 13 + yBob, 2, 2);
+      ctx.fillStyle = bootColor;
+      ctx.fillRect(10, 15, 2, 1);
+    } else if (pose === 'kick') {
+      // Plant leg (left)
+      ctx.fillStyle = shirtColor;
+      ctx.fillRect(5, 13 + yBob, 2, 2);
+      ctx.fillStyle = bootColor;
+      ctx.fillRect(5, 15, 2, 1);
+
+      // Kicking leg extended high (right)
+      ctx.fillStyle = shirtColor;
+      ctx.fillRect(10, 11 + yBob, 3, 2);
+      ctx.fillStyle = bootColor;
+      ctx.fillRect(13, 10 + yBob, 2, 2);
+    } else {
+      // Stand
+      ctx.fillStyle = shirtColor;
+      ctx.fillRect(5, 13, 2, 2);
+      ctx.fillRect(9, 13, 2, 2);
+      ctx.fillStyle = bootColor;
+      ctx.fillRect(5, 15, 2, 1);
+      ctx.fillRect(9, 15, 2, 1);
+    }
 
     canvas.refresh();
   }
@@ -943,7 +1103,7 @@ export class MatchScene extends Phaser.Scene {
     x: number,
     y: number
   ): PitchPlayer {
-    const textureKey =
+    const prefix =
       team === 'home'
         ? isGK
           ? 'player_home_gk'
@@ -959,8 +1119,8 @@ export class MatchScene extends Phaser.Scene {
     const shadow = this.add.sprite(0, 7, 'player_shadow');
     shadow.setOrigin(0.5, 0.5);
 
-    // Player Sprite
-    const sprite = this.add.sprite(0, 0, textureKey);
+    // Player Sprite (default stand pose)
+    const sprite = this.add.sprite(0, 0, `${prefix}_stand`);
     sprite.setOrigin(0.5, 0.5);
 
     container.add([shadow, sprite]);
@@ -977,6 +1137,10 @@ export class MatchScene extends Phaser.Scene {
       sprite,
       shadow,
       container,
+      texturePrefix: prefix,
+      tacticalState: 'IDLE',
+      animFrame: 0,
+      isMoving: false,
     };
   }
 
@@ -1371,11 +1535,21 @@ export class MatchScene extends Phaser.Scene {
       true
     );
 
+    // Set shooter kicking sprite pose
+    const shooter = this.findNearestPlayer(fromX, fromY, isHomeShooting ? 'home' : 'away');
+    if (shooter) {
+      shooter.sprite.setTexture(`${shooter.texturePrefix}_kick`);
+      this.time.delayedCall(300 / speed, () => {
+        shooter.sprite.setTexture(`${shooter.texturePrefix}_stand`);
+      });
+    }
+
     // Find defending goalkeeper
     const defendingTeam = isHomeShooting ? 'away' : 'home';
     const gk = this.players.find((p) => p.team === defendingTeam && p.isGK);
 
     if (gk) {
+      gk.sprite.setTexture(`${gk.texturePrefix}_dive`);
       // Goalkeeper dives towards shot Y
       const diveY = isSaved ? targetGoalY : targetGoalY + (targetGoalY > CENTER_Y ? -8 : 8);
       const tweenGk = this.tweens.add({
@@ -1386,6 +1560,10 @@ export class MatchScene extends Phaser.Scene {
         ease: 'Quad.easeOut',
         yoyo: true,
         hold: 200 / speed,
+        onComplete: () => {
+          gk.sprite.setTexture(`${gk.texturePrefix}_stand`);
+          gk.container.setAngle(0);
+        },
       });
       this.activeTweens.push(tweenGk);
     }
@@ -1522,8 +1700,9 @@ export class MatchScene extends Phaser.Scene {
     this.ballSprite.setPosition(x, y);
     this.ballShadow.setPosition(x, y + 3);
 
-    // Star impact sparks
+    // Star impact sparks & green turf shreds
     this.burstSparks(x, y);
+    this.burstTurfParticles(x, y);
 
     // Pop retro text
     const label = type === 'TACKLE' ? 'TACKLE!' : type === 'INTERCEPTION' ? 'INTERCEPT!' : 'TURNOVER!';
@@ -1535,6 +1714,14 @@ export class MatchScene extends Phaser.Scene {
 
     // Dynamic Team Transition: counter-attack push & recovery scramble
     const transitionTeam = squirtX > HALFWAY_X ? 'home' : 'away';
+    const tackler = this.findNearestPlayer(x, y, transitionTeam);
+    if (tackler) {
+      tackler.sprite.setTexture(`${tackler.texturePrefix}_slide`);
+      this.time.delayedCall(300 / speed, () => {
+        tackler.sprite.setTexture(`${tackler.texturePrefix}_stand`);
+      });
+    }
+
     this.updateTacticalFormations(squirtX, squirtY, transitionTeam, duration, false);
 
     const tweenBall = this.tweens.add({
@@ -1719,108 +1906,52 @@ export class MatchScene extends Phaser.Scene {
     isShootingPhase: boolean = false,
     receivingPlayerId?: string
   ): void {
-    const defendingTeam = attackingTeam === 'home' ? 'away' : 'home';
-    const presser = this.findNearestPlayer(targetBallX, targetBallY, defendingTeam);
+    const playerInputs: TacticalPlayerInput[] = this.players.map((p) => ({
+      id: p.id,
+      team: p.team,
+      role: p.role,
+      isGK: p.isGK,
+      baseX: p.baseX,
+      baseY: p.baseY,
+      currentX: p.container.x,
+      currentY: p.container.y,
+    }));
 
-    for (const p of this.players) {
+    const context: TacticalContext = {
+      ballX: targetBallX,
+      ballY: targetBallY,
+      attackingTeam,
+      isShootingPhase,
+      pitchBounds: {
+        left: PITCH_LEFT,
+        right: PITCH_RIGHT,
+        top: PITCH_TOP,
+        bottom: PITCH_BOTTOM,
+        centerX: HALFWAY_X,
+        centerY: CENTER_Y,
+      },
+    };
+
+    for (let i = 0; i < this.players.length; i++) {
+      const p = this.players[i];
       if (!p.container || !p.container.active) continue;
-      if (receivingPlayerId && p.id === receivingPlayerId) continue;
 
-      let targetX = p.baseX;
-      let targetY = p.baseY;
-
-      if (p.isGK) {
-        if (p.team === defendingTeam) {
-          // Defending GK guards the goal mouth and shifts on the angle
-          targetX = defendingTeam === 'home' ? PITCH_LEFT + 6 : PITCH_RIGHT - 6;
-          targetY = Phaser.Math.Clamp(
-            CENTER_Y + (targetBallY - CENTER_Y) * 0.32,
-            CENTER_Y - 14,
-            CENTER_Y + 14
-          );
-        } else {
-          // Attacking GK steps up to act as a sweeper keeper support
-          const pushX = attackingTeam === 'home' ? 18 : -18;
-          targetX = p.baseX + pushX;
-          targetY = CENTER_Y + (targetBallY - CENTER_Y) * 0.15;
-        }
-      } else if (p.team === attackingTeam) {
-        // ==========================================
-        // ATTACKING TEAM MOVEMENT
-        // ==========================================
-        const forwardDirection = attackingTeam === 'home' ? 1 : -1;
-        const flankDistance = Math.abs(p.baseY - CENTER_Y);
-
-        if (p.role === 'ATT') {
-          if (isShootingPhase) {
-            // Surge towards penalty box / 6-yard area for tap-in or rebound
-            const boxGoalX = attackingTeam === 'home' ? PITCH_RIGHT - 28 : PITCH_LEFT + 28;
-            targetX = boxGoalX + forwardDirection * (Math.random() * 15 - 8);
-            targetY = targetBallY + (p.baseY > CENTER_Y ? 12 : -12);
-          } else {
-            // Forward runs into space / channels
-            const pushX = forwardDirection * 48;
-            const lateralShift = (targetBallY - p.baseY) * 0.28;
-            targetX = p.baseX + pushX + (targetBallX - p.baseX) * 0.30;
-            targetY = p.baseY + lateralShift;
-          }
-        } else if (p.role === 'MID') {
-          // Midfielders support the play from behind the ball and offer passing triangles
-          const pushX = forwardDirection * 34;
-          const lateralShift = (targetBallY - p.baseY) * 0.35;
-          targetX = p.baseX + pushX + (targetBallX - p.baseX) * 0.25;
-          targetY = p.baseY + lateralShift;
-        } else {
-          // Defenders push up high to compress team length (high defensive line)
-          const pushX = forwardDirection * 28;
-          targetX = p.baseX + pushX;
-          // Fullback overlap if the ball is on their flank
-          if (flankDistance > 45 && Math.sign(p.baseY - CENTER_Y) === Math.sign(targetBallY - CENTER_Y)) {
-            targetX += forwardDirection * 20;
-          }
-          targetY = p.baseY + (targetBallY - p.baseY) * 0.18;
-        }
-      } else {
-        // ==========================================
-        // DEFENDING TEAM MOVEMENT
-        // ==========================================
-        if (p === presser) {
-          // The closest outfield defender actively presses and closes down the ball carrier!
-          const pressOffsetX = attackingTeam === 'home' ? 18 : -18;
-          targetX = targetBallX + pressOffsetX;
-          targetY = targetBallY + (p.baseY > CENTER_Y ? -8 : 8);
-        } else {
-          const dropDirection = defendingTeam === 'home' ? -1 : 1;
-
-          if (p.role === 'DEF') {
-            // Deep compact defensive line shielding the 18-yard box
-            const dropX = dropDirection * 28;
-            targetX = p.baseX + dropX;
-            // Compact towards center / ball side
-            targetY = CENTER_Y + (p.baseY - CENTER_Y) * 0.65 + (targetBallY - CENTER_Y) * 0.22;
-          } else if (p.role === 'MID') {
-            // Midfield line forms a tight defensive screen in front of defenders
-            const dropX = dropDirection * 32;
-            targetX = p.baseX + dropX;
-            targetY = CENTER_Y + (p.baseY - CENTER_Y) * 0.70 + (targetBallY - CENTER_Y) * 0.28;
-          } else {
-            // Strikers drop to near the halfway line as target outlet for counter-attacks
-            targetX = (defendingTeam === 'home' ? PITCH_LEFT + 150 : PITCH_RIGHT - 150);
-            targetY = p.baseY + (targetBallY - p.baseY) * 0.15;
-          }
-        }
-      }
-
-      // Keep within pitch boundaries
-      targetX = Phaser.Math.Clamp(targetX, PITCH_LEFT + 8, PITCH_RIGHT - 8);
-      targetY = Phaser.Math.Clamp(targetY, PITCH_TOP + 8, PITCH_BOTTOM - 8);
+      const { targetX, targetY, state } = computeTeamTacticalTarget(
+        playerInputs[i],
+        playerInputs,
+        context,
+        receivingPlayerId
+      );
+      p.tacticalState = state;
 
       const dx = targetX - p.container.x;
       const dy = targetY - p.container.y;
       const distSq = dx * dx + dy * dy;
 
       if (distSq > 16) {
-        // Dynamic running stride & tilt
+        p.isMoving = true;
+        let stepCount = 0;
+
         const moveTween = this.tweens.add({
           targets: p.container,
           x: targetX,
@@ -1829,13 +1960,53 @@ export class MatchScene extends Phaser.Scene {
           ease: 'Quad.easeOut',
           onStart: () => {
             p.sprite.setAngle(dx > 0 ? 4 : -4);
+            if (state === 'SLIDING') {
+              p.sprite.setTexture(`${p.texturePrefix}_slide`);
+              this.burstTurfParticles(p.container.x, p.container.y);
+            } else if (state === 'DIVING' && p.isGK) {
+              p.sprite.setTexture(`${p.texturePrefix}_dive`);
+            } else {
+              p.sprite.setTexture(`${p.texturePrefix}_run1`);
+            }
+          },
+          onUpdate: () => {
+            stepCount++;
+            if (!p.isGK && state !== 'SLIDING') {
+              const frameKey = Math.floor(stepCount / 3) % 2 === 0 ? '_run1' : '_run2';
+              p.sprite.setTexture(`${p.texturePrefix}${frameKey}`);
+            }
           },
           onComplete: () => {
+            p.isMoving = false;
+            p.sprite.setTexture(`${p.texturePrefix}_stand`);
             p.sprite.setAngle(0);
           },
         });
         this.activeTweens.push(moveTween);
+      } else {
+        p.isMoving = false;
+        p.sprite.setTexture(`${p.texturePrefix}_stand`);
       }
+    }
+  }
+
+  private burstTurfParticles(x: number, y: number): void {
+    for (let i = 0; i < 4; i++) {
+      const turf = this.add.sprite(
+        x + Phaser.Math.Between(-6, 6),
+        y + 6 + Phaser.Math.Between(-2, 2),
+        'turf_grass_pixel'
+      );
+      turf.setDepth(24);
+      this.tweens.add({
+        targets: turf,
+        x: turf.x + Phaser.Math.Between(-12, 12),
+        y: turf.y + Phaser.Math.Between(-8, -2),
+        alpha: 0,
+        duration: 250 / this.speedMultiplier,
+        ease: 'Quad.easeOut',
+        onComplete: () => turf.destroy(),
+      });
     }
   }
 
