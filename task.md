@@ -344,6 +344,26 @@
 
 ---
 
+## 🚀 Version 0.7.4: Smooth Continuous Jogging Engine & Logical Player-to-Player Passing (Completed)
+
+- [x] **1. Enjin Berjogging Berterusan Semua Pemain (*Continuous Smooth Jogging Engine*)**:
+  - [x] Kaedah Phaser `update(time, delta)` menguruskan kitaran langkah berjogging berterusan untuk kesemua 22 pemain.
+  - [x] Menghapuskan pembekuan kaku (jerky frame-by-frame freezes); pemain tidak lagi menjadi patung statik semasa jeda acara.
+  - [x] Ayunan badan naik turun (*vertical bounce* $\pm 1.5\text{px}$) secara organik dan berbeza fasa (*jogPhase*) bagi setiap pemain.
+  - [x] Kecondongan badan dinamik menghadap arah permainan dan bola.
+  - [x] Pasukan berjogging naik padang (*advance push*) semasa fasa menyerang dan berjogging turun (*compact retreat*) semasa bertahan.
+- [x] **2. Sistem Hantaran Bola Logik Pemain-ke-Pemain (*Player-to-Player Passing Logic*)**:
+  - [x] Menghapuskan teleportasi bola rawak; bola sentiasa bermula di kaki pemain pembawa bola (*ball carrier / passer*).
+  - [x] Pemain penerima (*receiver*) dikenal pasti secara taktikal dan bergerak menyambut bola (*lead pass run*).
+  - [x] Passer mengangkat kaki menendang (`_kick`), bola meluncur terus ke kaki receiver, dan receiver mengawal bola untuk gerakan seterusnya.
+  - [x] Rembatan (*shot*), rampasan bola (*tackle*), dan penyelamatan penjaga gol mengekalkan kesinambungan bola fizikal dari kaki ke kaki.
+- [x] **3. Ujian & Jaminan Kualiti**:
+  - [x] 194/194 unit tests lulus 100% merentasi 23 fail ujian.
+  - [x] Ujian Playwright E2E browser lulus tanpa sebarang ralat.
+  - [x] Kompilasi TypeScript dan binaan PWA Vite sifar ralat.
+
+---
+
 ## 🔮 Version 0.8.0: Multi-League Pyramid, International Cups, Cloud Backup, & Advanced Sound Design (Planned)
 
 - [ ] **1. Sistem Piramid Liga Berbilang Tahap (Multi-Tier Pyramid & Promotion/Relegation)**:

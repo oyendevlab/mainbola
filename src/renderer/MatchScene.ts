@@ -62,6 +62,8 @@ interface PitchPlayer {
   tacticalState?: PlayerTacticalState;
   animFrame?: number;
   isMoving?: boolean;
+  isActionLocked?: boolean;
+  jogPhase: number;
 }
 
 // Retro Pitch Constants
@@ -85,6 +87,7 @@ export class MatchScene extends Phaser.Scene {
   private isPausedState = false;
   private isFinished = false;
   private isSecondHalf = false;
+  private currentCarrierId: string | null = null;
 
   private homeTeam: TeamVisualInfo = {
     id: 'home',
@@ -159,6 +162,7 @@ export class MatchScene extends Phaser.Scene {
     this.awayScore = 0;
     this.isFinished = false;
     this.isSecondHalf = false;
+    this.currentCarrierId = null;
   }
 
   preload(): void {
@@ -195,6 +199,121 @@ export class MatchScene extends Phaser.Scene {
     if (!this.isPausedState) {
       this.scheduleNextEvent(600);
     }
+  }
+
+  /**
+   * Main animation loop (v0.7.4)
+   * Drives continuous smooth jogging and body bobbing for all 22 players.
+   */
+  override update(time: number, _delta: number): void {
+    if (this.isPausedState || this.isFinished) return;
+    this.updateContinuousPlayerJogging(time);
+  }
+
+  /**
+   * Continuous smooth jogging engine for all 22 players (v0.7.4)
+   * Eliminates jerky frame-by-frame freezes; all players stay active and jogging.
+   */
+  private updateContinuousPlayerJogging(time: number): void {
+    for (let i = 0; i < this.players.length; i++) {
+      const p = this.players[i];
+      if (!p.container || !p.container.active) continue;
+
+      // Preserve special action poses (kick, slide tackle, diving save)
+      if (p.isActionLocked) continue;
+
+      if (p.isMoving) {
+        // Fast active jogging stride while repositioning
+        const strideCycle = Math.floor((time + p.jogPhase * 100) / 140);
+        const frameKey = strideCycle % 2 === 0 ? '_run1' : '_run2';
+        p.sprite.setTexture(`${p.texturePrefix}${frameKey}`);
+
+        // Natural vertical running bounce
+        const bounceY = Math.sin((time / 65) + p.jogPhase) * 1.5;
+        p.sprite.setY(bounceY);
+      } else {
+        // Rhythmic in-place jogging / on-toes stance shifting
+        const strideCycle = Math.floor((time + p.jogPhase * 150) / 240);
+        const frameKey = strideCycle % 2 === 0 ? '_run1' : '_stand';
+        p.sprite.setTexture(`${p.texturePrefix}${frameKey}`);
+
+        // Subtle stance vertical spring
+        const bounceY = Math.sin((time / 110) + p.jogPhase) * 0.9;
+        p.sprite.setY(bounceY);
+
+        // Body tilts slightly towards ball direction
+        const faceDir = this.ballX > p.container.x ? 1.5 : -1.5;
+        p.sprite.setAngle(faceDir);
+      }
+    }
+  }
+
+  /**
+   * Resolves a player by ID, Name, or nearest to current ball position (v0.7.4)
+   */
+  private findPlayer(id?: string, name?: string, team?: 'home' | 'away'): PitchPlayer | null {
+    if (id) {
+      const p = this.players.find((pl) => pl.id === id);
+      if (p) return p;
+    }
+    if (name) {
+      const p = this.players.find((pl) => pl.name === name);
+      if (p) return p;
+    }
+    if (team) {
+      return this.findNearestPlayer(this.ballX, this.ballY, team);
+    }
+    return null;
+  }
+
+  /**
+   * Intelligently selects a pass receiver teammate in open space ahead (v0.7.4)
+   */
+  private findPassReceiver(
+    passer: PitchPlayer,
+    secondaryId?: string,
+    secondaryName?: string
+  ): PitchPlayer {
+    const team = passer.team;
+    if (secondaryId) {
+      const p = this.players.find((pl) => pl.id === secondaryId && pl.team === team && pl.id !== passer.id);
+      if (p) return p;
+    }
+    if (secondaryName) {
+      const p = this.players.find((pl) => pl.name === secondaryName && pl.team === team && pl.id !== passer.id);
+      if (p) return p;
+    }
+
+    // Filter outfield teammates
+    const teammates = this.players.filter((pl) => pl.team === team && pl.id !== passer.id && !pl.isGK);
+    if (teammates.length === 0) return passer;
+
+    // Attacking direction check
+    const isAttackingRight = (team === 'home' && !this.isSecondHalf) || (team === 'away' && this.isSecondHalf);
+
+    // Candidates in forward direction
+    const forwardCandidates = teammates.filter((pl) => {
+      const dx = pl.container.x - passer.container.x;
+      return isAttackingRight ? dx > -15 : dx < 15;
+    });
+
+    const pool = forwardCandidates.length > 0 ? forwardCandidates : teammates;
+
+    // Pick teammate closest to an ideal pass distance (~75px)
+    let bestTeammate = pool[0];
+    let bestScore = Infinity;
+    for (const pl of pool) {
+      const dx = pl.container.x - passer.container.x;
+      const dy = pl.container.y - passer.container.y;
+      const dist = Math.sqrt(dx * dx + dy * dy);
+      const score = Math.abs(dist - 75);
+      if (score < bestScore) {
+        bestScore = score;
+        bestTeammate = pl;
+      }
+    }
+
+    return bestTeammate;
   }
 
   /**
@@ -1338,6 +1457,8 @@ export class MatchScene extends Phaser.Scene {
       tacticalState: 'IDLE',
       animFrame: 0,
       isMoving: false,
+      isActionLocked: false,
+      jogPhase: Math.random() * Math.PI * 2,
     };
   }
 
@@ -1477,14 +1598,14 @@ export class MatchScene extends Phaser.Scene {
    * Coordinate converter from normalized (0..100) to pitch screen pixels
    * Accounts for half-time side flipping (v0.7.3)
    */
-  private normToScreenX(normX: number): number {
+  public normToScreenX(normX: number): number {
     const effX = this.isSecondHalf
       ? 100 - Math.max(0, Math.min(100, normX))
       : Math.max(0, Math.min(100, normX));
     return PITCH_LEFT + (effX / 100) * PITCH_WIDTH;
   }
 
-  private normToScreenY(normY: number): number {
+  public normToScreenY(normY: number): number {
     return PITCH_TOP + (Math.max(0, Math.min(100, normY)) / 100) * PITCH_HEIGHT;
   }
 
@@ -1555,21 +1676,6 @@ export class MatchScene extends Phaser.Scene {
     const isHome = event.teamId === this.homeTeam.id;
     const speed = this.speedMultiplier;
 
-    // Resolve coordinates or fallback
-    let fromX = this.ballX;
-    let fromY = this.ballY;
-    if (event.fromCoords) {
-      fromX = this.normToScreenX(event.fromCoords.x);
-      fromY = this.normToScreenY(event.fromCoords.y);
-    }
-
-    let toX = fromX;
-    let toY = fromY;
-    if (event.toCoords) {
-      toX = this.normToScreenX(event.toCoords.x);
-      toY = this.normToScreenY(event.toCoords.y);
-    }
-
     switch (event.type) {
       case 'KICKOFF': {
         playWhistle('kickoff');
@@ -1578,29 +1684,29 @@ export class MatchScene extends Phaser.Scene {
       }
       case 'PASS': {
         playKick(false);
-        this.animatePass(fromX, fromY, toX, toY, isHome, speed, onComplete);
+        this.animatePass(event, isHome, speed, onComplete);
         break;
       }
       case 'SHOT': {
         playKick(true);
-        this.animateShot(fromX, fromY, isHome, false, speed, onComplete);
+        this.animateShot(event, isHome, false, speed, onComplete);
         break;
       }
       case 'SAVE': {
         playKick(true);
-        this.animateShot(fromX, fromY, !isHome, true, speed, onComplete);
+        this.animateShot(event, !isHome, true, speed, onComplete);
         break;
       }
       case 'GOAL': {
         playCheer();
-        this.animateGoal(fromX, fromY, isHome, event, speed, onComplete);
+        this.animateGoal(event, isHome, speed, onComplete);
         break;
       }
       case 'TACKLE':
       case 'INTERCEPTION':
       case 'TURNOVER': {
         playTackle();
-        this.animateTackle(fromX, fromY, event.type, speed, onComplete);
+        this.animateTackle(event, isHome, event.type, speed, onComplete);
         break;
       }
       case 'HALFTIME': {
@@ -1622,7 +1728,7 @@ export class MatchScene extends Phaser.Scene {
       }
       default: {
         // Fallback default pass or movement
-        this.animatePass(fromX, fromY, toX, toY, isHome, speed, onComplete);
+        this.animatePass(event, isHome, speed, onComplete);
         break;
       }
     }
@@ -1684,6 +1790,10 @@ export class MatchScene extends Phaser.Scene {
     this.ballSprite.setPosition(HALFWAY_X, CENTER_Y);
     this.ballShadow.setPosition(HALFWAY_X, CENTER_Y + 3);
 
+    // Designate kickoff taker as initial ball carrier
+    const kickoffTaker = this.players.find((p) => p.team === 'home' && p.role === 'ATT') || this.players[0];
+    this.currentCarrierId = kickoffTaker?.id || null;
+
     // Reset both teams cleanly to base tactical shape
     this.resetPlayersToFormation(500 / this.speedMultiplier);
 
@@ -1693,48 +1803,69 @@ export class MatchScene extends Phaser.Scene {
   }
 
   /**
-   * PASS Animation
+   * PASS Animation: Authentic continuous player-to-player passing (v0.7.4)
+   * Ball starts directly at passer's feet and travels smoothly to receiver.
    */
   private animatePass(
-    fromX: number,
-    fromY: number,
-    toX: number,
-    toY: number,
+    event: MatchEvent,
     isHome: boolean,
     speed: number,
     onComplete: () => void
   ): void {
     const duration = Math.max(120, 650 / speed);
-
-    // Position ball at start if not already there
-    this.ballX = fromX;
-    this.ballY = fromY;
-    this.ballSprite.setPosition(fromX, fromY);
-    this.ballShadow.setPosition(fromX, fromY + 3);
-
-    // Find nearest teammate to target
     const targetTeam = isHome ? 'home' : 'away';
-    const receiver = this.findNearestPlayer(toX, toY, targetTeam);
-    if (receiver) {
-      // Receiver moves slightly towards landing spot
-      const tweenRec = this.tweens.add({
-        targets: receiver.container,
-        x: toX,
-        y: toY,
-        duration: duration * 0.9,
-        ease: 'Quad.easeOut',
-      });
-      this.activeTweens.push(tweenRec);
+
+    // 1. Identify Passer (ball carrier)
+    let passer = this.findPlayer(event.playerId, event.playerName, targetTeam);
+    if (!passer) {
+      passer = (this.currentCarrierId && this.players.find((p) => p.id === this.currentCarrierId && p.team === targetTeam))
+        || this.findNearestPlayer(this.ballX, this.ballY, targetTeam);
+    }
+    if (!passer) {
+      passer = this.players.find((p) => p.team === targetTeam && !p.isGK) || this.players[0];
     }
 
-    // Dynamic Team Formations: attacking forward push, defensive block, active presser
-    this.updateTacticalFormations(toX, toY, targetTeam, duration, false, receiver?.id);
+    // 2. Identify Receiver
+    const receiver = this.findPassReceiver(passer, event.secondaryPlayerId, event.secondaryPlayerName);
 
-    // Ball Tween with slight parabolic scale arc to simulate flight
+    // 3. Ball starts directly at passer's feet (never teleport to random coords)
+    const startX = passer.container.x;
+    const startY = passer.container.y + 4;
+    this.ballX = startX;
+    this.ballY = startY;
+    this.ballSprite.setPosition(startX, startY);
+    this.ballShadow.setPosition(startX, startY + 3);
+
+    // 4. Passer executes kicking animation pose
+    passer.isActionLocked = true;
+    passer.sprite.setTexture(`${passer.texturePrefix}_kick`);
+    this.time.delayedCall(220 / speed, () => {
+      passer.isActionLocked = false;
+    });
+
+    // 5. Target is receiver's position with slight lead stride
+    const isForward = (targetTeam === 'home' && !this.isSecondHalf) || (targetTeam === 'away' && this.isSecondHalf);
+    const leadX = Math.max(PITCH_LEFT + 14, Math.min(PITCH_RIGHT - 14, receiver.container.x + (isForward ? 8 : -8)));
+    const leadY = receiver.container.y + 4;
+
+    // Receiver moves slightly to welcome the pass
+    const tweenRec = this.tweens.add({
+      targets: receiver.container,
+      x: leadX,
+      y: leadY - 4,
+      duration: duration * 0.9,
+      ease: 'Sine.easeOut',
+    });
+    this.activeTweens.push(tweenRec);
+
+    // Dynamic Team Formations: all 22 players smoothly jog in formation
+    this.updateTacticalFormations(leadX, leadY, targetTeam, duration, false, receiver.id);
+
+    // 6. Ball Tween with parabolic flight
     const tweenBall = this.tweens.add({
       targets: [this.ballSprite, this.ballShadow],
-      x: toX,
-      y: toY,
+      x: leadX,
+      y: leadY,
       duration,
       ease: 'Sine.easeOut',
       onUpdate: () => {
@@ -1743,6 +1874,10 @@ export class MatchScene extends Phaser.Scene {
         this.ballShadow.setPosition(this.ballX, this.ballY + 3);
       },
       onComplete: () => {
+        // Ball arrives at receiver's feet
+        this.currentCarrierId = receiver.id;
+        this.ballX = leadX;
+        this.ballY = leadY;
         onComplete();
       },
     });
@@ -1761,17 +1896,32 @@ export class MatchScene extends Phaser.Scene {
   }
 
   /**
-   * SHOT / SAVE Animation
+   * SHOT / SAVE Animation: Shooter strikes directly from ball position (v0.7.4)
    */
   private animateShot(
-    fromX: number,
-    fromY: number,
+    event: MatchEvent,
     isHomeShooting: boolean,
     isSaved: boolean,
     speed: number,
     onComplete: () => void
   ): void {
     const duration = Math.max(100, 500 / speed);
+    const shootingTeam = isHomeShooting ? 'home' : 'away';
+
+    // 1. Identify Shooter
+    let shooter = this.findPlayer(event.playerId, event.playerName, shootingTeam)
+      || (this.currentCarrierId && this.players.find((p) => p.id === this.currentCarrierId && p.team === shootingTeam))
+      || this.findNearestPlayer(this.ballX, this.ballY, shootingTeam);
+    if (!shooter) {
+      shooter = this.players.find((p) => p.team === shootingTeam && p.role === 'ATT') || this.players[0];
+    }
+
+    const fromX = shooter.container.x;
+    const fromY = shooter.container.y + 4;
+    this.ballX = fromX;
+    this.ballY = fromY;
+    this.ballSprite.setPosition(fromX, fromY);
+    this.ballShadow.setPosition(fromX, fromY + 3);
 
     // Target goal line coordinates (swapped in 2nd half, v0.7.3)
     const homeGoalTarget = this.isSecondHalf ? PITCH_LEFT : PITCH_RIGHT;
@@ -1779,26 +1929,21 @@ export class MatchScene extends Phaser.Scene {
     const targetGoalX = isHomeShooting ? homeGoalTarget : awayGoalTarget;
     const targetGoalY = CENTER_Y + Phaser.Math.Between(-14, 14);
 
-    this.ballSprite.setPosition(fromX, fromY);
-    this.ballShadow.setPosition(fromX, fromY + 3);
-
     // Dynamic Team Formations: attacking team crashes box, defending team packs box
     this.updateTacticalFormations(
       targetGoalX,
       targetGoalY,
-      isHomeShooting ? 'home' : 'away',
+      shootingTeam,
       duration,
       true
     );
 
     // Set shooter kicking sprite pose
-    const shooter = this.findNearestPlayer(fromX, fromY, isHomeShooting ? 'home' : 'away');
-    if (shooter) {
-      shooter.sprite.setTexture(`${shooter.texturePrefix}_kick`);
-      this.time.delayedCall(300 / speed, () => {
-        shooter.sprite.setTexture(`${shooter.texturePrefix}_stand`);
-      });
-    }
+    shooter.isActionLocked = true;
+    shooter.sprite.setTexture(`${shooter.texturePrefix}_kick`);
+    this.time.delayedCall(300 / speed, () => {
+      shooter.isActionLocked = false;
+    });
 
     // Trigger crowd excitement
     this.celebrateCrowd(600 / speed);
@@ -1808,8 +1953,8 @@ export class MatchScene extends Phaser.Scene {
     const gk = this.players.find((p) => p.team === defendingTeam && p.isGK);
 
     if (gk) {
+      gk.isActionLocked = true;
       gk.sprite.setTexture(`${gk.texturePrefix}_dive`);
-      // Goalkeeper dives towards shot Y
       const diveY = isSaved ? targetGoalY : targetGoalY + (targetGoalY > CENTER_Y ? -8 : 8);
       const isShootingRight = targetGoalX > HALFWAY_X;
       const tweenGk = this.tweens.add({
@@ -1821,7 +1966,7 @@ export class MatchScene extends Phaser.Scene {
         yoyo: true,
         hold: 200 / speed,
         onComplete: () => {
-          gk.sprite.setTexture(`${gk.texturePrefix}_stand`);
+          gk.isActionLocked = false;
           gk.container.setAngle(0);
         },
       });
@@ -1842,7 +1987,6 @@ export class MatchScene extends Phaser.Scene {
         this.ballX = this.ballSprite.x;
         this.ballY = this.ballSprite.y;
         this.ballShadow.setPosition(this.ballX, this.ballY + 3);
-        // Add tiny trail spark
         if (Math.random() > 0.4) {
           this.emitPixelTrail(this.ballX, this.ballY);
         }
@@ -1859,7 +2003,10 @@ export class MatchScene extends Phaser.Scene {
             y: reboundY,
             duration: 250 / speed,
             ease: 'Sine.easeOut',
-            onComplete: () => onComplete(),
+            onComplete: () => {
+              this.currentCarrierId = gk?.id || null;
+              onComplete();
+            },
           });
         } else {
           onComplete();
@@ -1873,10 +2020,8 @@ export class MatchScene extends Phaser.Scene {
    * GOAL Animation
    */
   private animateGoal(
-    fromX: number,
-    fromY: number,
-    isHomeScored: boolean,
     event: MatchEvent,
+    isHomeScored: boolean,
     speed: number,
     onComplete: () => void
   ): void {
@@ -1887,13 +2032,20 @@ export class MatchScene extends Phaser.Scene {
     const netY = CENTER_Y + Phaser.Math.Between(-12, 12);
     const isRightGoal = netX > HALFWAY_X;
 
-    // Position ball at shot start point
-    this.ballX = fromX;
-    this.ballY = fromY;
-    this.ballSprite.setPosition(fromX, fromY);
-    this.ballShadow.setPosition(fromX, fromY + 3);
+    const scoringTeam = isHomeScored ? 'home' : 'away';
+    let scorer = this.findPlayer(event.playerId, event.playerName, scoringTeam)
+      || (this.currentCarrierId && this.players.find((p) => p.id === this.currentCarrierId && p.team === scoringTeam))
+      || this.findNearestPlayer(this.ballX, this.ballY, scoringTeam);
 
-    // 1. Shoot into net
+    if (scorer) {
+      scorer.isActionLocked = true;
+      scorer.sprite.setTexture(`${scorer.texturePrefix}_kick`);
+      this.time.delayedCall(300 / speed, () => {
+        if (scorer) scorer.isActionLocked = false;
+      });
+    }
+
+    // 1. Shoot into net from current ball position
     const tweenGoalBall = this.tweens.add({
       targets: [this.ballSprite, this.ballShadow],
       x: netX,
@@ -1921,7 +2073,6 @@ export class MatchScene extends Phaser.Scene {
         this.celebrateCrowd(1600 / speed);
 
         // 6. Celebration Bounces for teammates
-        const scoringTeam = isHomeScored ? 'home' : 'away';
         for (const p of this.players) {
           if (p.team === scoringTeam) {
             this.tweens.add({
@@ -1940,6 +2091,7 @@ export class MatchScene extends Phaser.Scene {
           // Reset ball to center for subsequent play
           this.ballX = HALFWAY_X;
           this.ballY = CENTER_Y;
+          this.currentCarrierId = null;
           this.ballSprite.setPosition(HALFWAY_X, CENTER_Y);
           this.ballShadow.setPosition(HALFWAY_X, CENTER_Y + 3);
           onComplete();
@@ -1950,21 +2102,18 @@ export class MatchScene extends Phaser.Scene {
   }
 
   /**
-   * TACKLE / TURNOVER Animation
+   * TACKLE / TURNOVER Animation: Tackler closes down carrier and wins possession (v0.7.4)
    */
   private animateTackle(
-    x: number,
-    y: number,
+    _event: MatchEvent,
+    _isHome: boolean,
     type: string,
     speed: number,
     onComplete: () => void
   ): void {
     const duration = Math.max(100, 350 / speed);
-
-    this.ballX = x;
-    this.ballY = y;
-    this.ballSprite.setPosition(x, y);
-    this.ballShadow.setPosition(x, y + 3);
+    const x = this.ballX;
+    const y = this.ballY;
 
     // Star impact sparks & green turf shreds
     this.burstSparks(x, y);
@@ -1974,21 +2123,25 @@ export class MatchScene extends Phaser.Scene {
     const label = type === 'TACKLE' ? 'TACKLE!' : type === 'INTERCEPTION' ? 'INTERCEPT!' : 'TURNOVER!';
     this.showFloatingText(label, x, y - 12, '#F59E0B');
 
-    // Slight ball squirt
-    const squirtX = x + Phaser.Math.Between(-15, 15);
-    const squirtY = y + Phaser.Math.Between(-15, 15);
+    // Tackling team is opponent of current carrier
+    const currentCarrier = this.currentCarrierId ? this.players.find((p) => p.id === this.currentCarrierId) : null;
+    const tacklingTeam = currentCarrier ? (currentCarrier.team === 'home' ? 'away' : 'home') : (x > HALFWAY_X ? 'away' : 'home');
 
-    // Dynamic Team Transition: counter-attack push & recovery scramble
-    const transitionTeam = squirtX > HALFWAY_X ? 'home' : 'away';
-    const tackler = this.findNearestPlayer(x, y, transitionTeam);
+    const tackler = this.findNearestPlayer(x, y, tacklingTeam);
+    const squirtX = tackler ? tackler.container.x : Math.max(PITCH_LEFT + 15, Math.min(PITCH_RIGHT - 15, x + Phaser.Math.Between(-15, 15)));
+    const squirtY = tackler ? tackler.container.y + 4 : Math.max(PITCH_TOP + 15, Math.min(PITCH_BOTTOM - 15, y + Phaser.Math.Between(-15, 15)));
+
     if (tackler) {
+      tackler.isActionLocked = true;
       tackler.sprite.setTexture(`${tackler.texturePrefix}_slide`);
       this.time.delayedCall(300 / speed, () => {
-        tackler.sprite.setTexture(`${tackler.texturePrefix}_stand`);
+        tackler.isActionLocked = false;
       });
+      this.currentCarrierId = tackler.id;
     }
 
-    this.updateTacticalFormations(squirtX, squirtY, transitionTeam, duration, false);
+    // Dynamic Team Transition: counter-attack push & recovery scramble
+    this.updateTacticalFormations(squirtX, squirtY, tacklingTeam, duration, false);
 
     const tweenBall = this.tweens.add({
       targets: [this.ballSprite, this.ballShadow],
@@ -2217,46 +2370,33 @@ export class MatchScene extends Phaser.Scene {
 
       if (distSq > 16) {
         p.isMoving = true;
-        let stepCount = 0;
 
         const moveTween = this.tweens.add({
           targets: p.container,
           x: targetX,
           y: targetY,
           duration: Math.max(120, duration * 0.9),
-          ease: 'Quad.easeOut',
+          ease: 'Sine.easeOut',
           onStart: () => {
-            p.sprite.setAngle(dx > 0 ? 4 : -4);
+            p.sprite.setAngle(dx > 0 ? 3.5 : -3.5);
             if (state === 'SLIDING') {
+              p.isActionLocked = true;
               p.sprite.setTexture(`${p.texturePrefix}_slide`);
               this.burstTurfParticles(p.container.x, p.container.y);
             } else if (state === 'DIVING' && p.isGK) {
+              p.isActionLocked = true;
               p.sprite.setTexture(`${p.texturePrefix}_dive`);
-            } else {
-              p.sprite.setTexture(`${p.texturePrefix}_run1`);
-            }
-          },
-          onUpdate: () => {
-            stepCount++;
-            if (!p.isGK && state !== 'SLIDING') {
-              const frameKey = Math.floor(stepCount / 3) % 2 === 0 ? '_run1' : '_run2';
-              p.sprite.setTexture(`${p.texturePrefix}${frameKey}`);
-              // Dynamic vertical bobbing (badan naik turun) semasa larian (v0.7.3)
-              const bobY = Math.floor(stepCount / 3) % 2 === 0 ? -1.5 : 0.5;
-              p.sprite.setY(bobY);
             }
           },
           onComplete: () => {
             p.isMoving = false;
-            p.sprite.setTexture(`${p.texturePrefix}_stand`);
+            p.isActionLocked = false;
             p.sprite.setAngle(0);
-            p.sprite.setY(0);
           },
         });
         this.activeTweens.push(moveTween);
       } else {
         p.isMoving = false;
-        p.sprite.setTexture(`${p.texturePrefix}_stand`);
       }
     }
   }

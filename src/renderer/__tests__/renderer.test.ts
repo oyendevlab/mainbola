@@ -72,8 +72,11 @@ vi.mock('phaser', () => {
             destroy: vi.fn(),
             setY: vi.fn(),
             setTint: vi.fn(),
+            setTexture: vi.fn(),
+            setAngle: vi.fn(),
             x: 240,
             y: 135,
+            active: true,
           }),
         };
         time = {
